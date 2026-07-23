@@ -1011,47 +1011,60 @@ export default function App() {
   };
 
   const handleUpdateTableItems = (tableId: string, items: any[]) => {
-    setTablesComandas(prev => prev.map(tbl => {
-      if (tbl.id === tableId) {
-        // Recalculate subtotal based on product prices
-        const subtotal = items.reduce((acc, i) => {
-          const prod = products.find(p => p.id === i.productId);
-          return acc + ((prod ? prod.sellPrice : 0) * i.quantity);
-        }, 0);
+    setTablesComandas(prev => {
+      let targetTbl: TableComandaState | null = null;
+      const next = prev.map(tbl => {
+        if (tbl.id === tableId) {
+          // Recalculate subtotal based on product prices
+          const subtotal = items.reduce((acc, i) => {
+            const prod = products.find(p => p.id === i.productId);
+            return acc + ((prod ? prod.sellPrice : 0) * i.quantity);
+          }, 0);
 
-        let newStatus = tbl.status;
-        if (items.length > 0 && tbl.status === 'livre') {
-          newStatus = 'ocupada';
-        } else if (items.length === 0) {
-          newStatus = 'livre';
+          let newStatus = tbl.status;
+          if (items.length > 0 && tbl.status === 'livre') {
+            newStatus = 'ocupada';
+          }
+
+          targetTbl = {
+            ...tbl,
+            items,
+            status: newStatus,
+            subtotal
+          };
+          return targetTbl;
         }
+        return tbl;
+      });
 
-        const uTbl = {
-          ...tbl,
-          items,
-          status: newStatus,
-          subtotal
-        };
-        saveTableComandaToDb(uTbl);
-        return uTbl;
+      if (targetTbl) {
+        saveTableComandaToDb(targetTbl);
       }
-      return tbl;
-    }));
+      return next;
+    });
   };
 
   const handleUpdateTableStatus = (tableId: string, status: 'livre' | 'ocupada' | 'fechando', tableName?: string) => {
-    setTablesComandas(prev => prev.map(tbl => {
-      if (tbl.id === tableId) {
-        const uTbl = { 
-          ...tbl, 
-          status,
-          tableName: status === 'livre' ? undefined : (tableName !== undefined ? tableName : tbl.tableName)
-        };
-        saveTableComandaToDb(uTbl);
-        return uTbl;
+    setTablesComandas(prev => {
+      let targetTbl: TableComandaState | null = null;
+      const next = prev.map(tbl => {
+        if (tbl.id === tableId) {
+          targetTbl = { 
+            ...tbl, 
+            status,
+            tableName: status === 'livre' ? undefined : (tableName !== undefined ? tableName : tbl.tableName),
+            items: status === 'livre' ? [] : (tbl.items || [])
+          };
+          return targetTbl;
+        }
+        return tbl;
+      });
+
+      if (targetTbl) {
+        saveTableComandaToDb(targetTbl);
       }
-      return tbl;
-    }));
+      return next;
+    });
   };
 
   const handleToggleTheme = () => {
