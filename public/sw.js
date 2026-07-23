@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fluxos-cache-v12';
+const CACHE_NAME = 'fluxos-cache-v13-force-update';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -20,13 +20,14 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate Event
+// Activate Event - Delete all old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[SW] Purging old cache:', key);
             return caches.delete(key);
           }
         })
@@ -41,6 +42,11 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Never cache Firestore API requests or live websockets
+  if (url.pathname.includes('firestore') || url.pathname.includes('google') || url.pathname.includes('api')) {
+    return;
+  }
 
   event.respondWith(
     fetch(event.request)

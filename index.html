@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>FluxOS - Operating System para Adegas e PDV</title>
     
+    <!-- Anti-Cache Headers for Instant Deploys -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
     <!-- PWA Configurations -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#000000" />
@@ -44,6 +49,18 @@
           navigator.serviceWorker.register('/sw.js')
             .then(function(reg) {
               console.log('[FluxOS] ServiceWorker registered:', reg.scope);
+              reg.update(); // Check for sw updates on every page load
+              reg.onupdatefound = function() {
+                var installingWorker = reg.installing;
+                if (installingWorker) {
+                  installingWorker.onstatechange = function() {
+                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('[FluxOS] Nova versão encontrada. Atualizando cache...');
+                      window.location.reload();
+                    }
+                  };
+                }
+              };
             })
             .catch(function(err) {
               console.error('[FluxOS] ServiceWorker registration failed:', err);

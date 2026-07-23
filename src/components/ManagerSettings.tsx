@@ -246,6 +246,24 @@ export default function ManagerSettings({
   const [editingUserPinId, setEditingUserPinId] = useState<string | null>(null);
   const [editPinValue, setEditPinValue] = useState('');
 
+  const handleClearSystemCache = async () => {
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(key => caches.delete(key)));
+      }
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(reg => reg.unregister()));
+      }
+      alert('Cache e Service Workers do sistema limpos com sucesso! A página será recarregada agora com as versões mais recentes.');
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Erro ao limpar cache:', err);
+      alert('Erro ao limpar cache: ' + err?.message);
+    }
+  };
+
   const handleSaveCorporate = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('adegaos_store_name', storeName);
@@ -301,16 +319,30 @@ export default function ManagerSettings({
           <p className="text-xs text-gray-400 font-medium mt-0.5">Gerenciamento modular de parâmetros da empresa, rede de impressoras, PINs de colaboradores e terminais PDV.</p>
         </div>
 
-        {onToggleTheme && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={onToggleTheme}
+            type="button"
+            onClick={handleClearSystemCache}
             className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
-              theme === 'dark' ? 'bg-[#111] border-gray-800 text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 shadow-sm'
+              theme === 'dark' ? 'bg-[#111] border-gray-800 text-amber-400 hover:text-amber-300 hover:bg-[#1A1A1A]' : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 shadow-sm'
             }`}
+            title="Exclui o cache e atualiza a aplicação com a versão mais recente do servidor"
           >
-            {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+            <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+            <span>Limpar Cache & Atualizar</span>
           </button>
-        )}
+
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
+                theme === 'dark' ? 'bg-[#111] border-gray-800 text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 shadow-sm'
+              }`}
+            >
+              {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* TOPIC SEPARATION NAVIGATION BAR (Tabs) */}
@@ -1163,9 +1195,18 @@ export default function ManagerSettings({
                   </div>
                   <div className="flex justify-between items-center">
                     <span>Versão da PWA:</span>
-                    <span className="font-mono text-white font-bold">v3.8.4</span>
+                    <span className="font-mono text-white font-bold">v3.8.5</span>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleClearSystemCache}
+                  className="mt-2 w-full py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold text-xs hover:bg-amber-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Limpar Cache de Deploy
+                </button>
               </div>
             </div>
           </div>
