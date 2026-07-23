@@ -117,16 +117,15 @@ function setCollection<T>(key: string, data: T[], listenerSet: Set<(data: T[]) =
 // ================= SUBSCRIPTION METHODS (REAL-TIME INSTANT SYNC) =================
 
 export function subscribeProducts(callback: (p: Product[]) => void) {
-  callback(getCollection('products', INITIAL_PRODUCTS));
   if (db) {
     return onSnapshot(collection(db, 'products'), (snapshot) => {
       if (snapshot.empty) {
         INITIAL_PRODUCTS.forEach(p => setDoc(doc(db!, 'products', p.id), cleanForFirestore(p)));
-        setCollection('products', INITIAL_PRODUCTS, listeners.products);
+        localStorage.setItem('fluxos_products', JSON.stringify(INITIAL_PRODUCTS));
         callback(INITIAL_PRODUCTS);
       } else {
         const prods = snapshot.docs.map(d => d.data() as Product);
-        setCollection('products', prods, listeners.products);
+        localStorage.setItem('fluxos_products', JSON.stringify(prods));
         callback(prods);
       }
     }, (err) => {
@@ -135,20 +134,20 @@ export function subscribeProducts(callback: (p: Product[]) => void) {
     });
   }
   listeners.products.add(callback);
+  callback(getCollection('products', INITIAL_PRODUCTS));
   return () => { listeners.products.delete(callback); };
 }
 
 export function subscribeSales(callback: (s: Sale[]) => void) {
-  callback(getCollection('sales', MOCK_SALES));
   if (db) {
     return onSnapshot(collection(db, 'sales'), (snapshot) => {
       if (snapshot.empty) {
-        setCollection('sales', [], listeners.sales);
+        localStorage.setItem('fluxos_sales', JSON.stringify([]));
         callback([]);
       } else {
         const sales = snapshot.docs.map(d => d.data() as Sale);
         sales.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setCollection('sales', sales, listeners.sales);
+        localStorage.setItem('fluxos_sales', JSON.stringify(sales));
         callback(sales);
       }
     }, (err) => {
@@ -157,20 +156,20 @@ export function subscribeSales(callback: (s: Sale[]) => void) {
     });
   }
   listeners.sales.add(callback);
+  callback(getCollection('sales', MOCK_SALES));
   return () => { listeners.sales.delete(callback); };
 }
 
 export function subscribeSuppliers(callback: (s: Supplier[]) => void) {
-  callback(getCollection('suppliers', INITIAL_SUPPLIERS));
   if (db) {
     return onSnapshot(collection(db, 'suppliers'), (snapshot) => {
       if (snapshot.empty) {
         INITIAL_SUPPLIERS.forEach(s => setDoc(doc(db!, 'suppliers', s.id), cleanForFirestore(s)));
-        setCollection('suppliers', INITIAL_SUPPLIERS, listeners.suppliers);
+        localStorage.setItem('fluxos_suppliers', JSON.stringify(INITIAL_SUPPLIERS));
         callback(INITIAL_SUPPLIERS);
       } else {
         const sups = snapshot.docs.map(d => d.data() as Supplier);
-        setCollection('suppliers', sups, listeners.suppliers);
+        localStorage.setItem('fluxos_suppliers', JSON.stringify(sups));
         callback(sups);
       }
     }, (err) => {
@@ -179,15 +178,15 @@ export function subscribeSuppliers(callback: (s: Supplier[]) => void) {
     });
   }
   listeners.suppliers.add(callback);
+  callback(getCollection('suppliers', INITIAL_SUPPLIERS));
   return () => { listeners.suppliers.delete(callback); };
 }
 
 export function subscribeTransactions(callback: (t: FinancialTransaction[]) => void) {
-  callback(getCollection('transactions', []));
   if (db) {
     return onSnapshot(collection(db, 'transactions'), (snapshot) => {
       const txs = snapshot.docs.map(d => d.data() as FinancialTransaction);
-      setCollection('transactions', txs, listeners.transactions);
+      localStorage.setItem('fluxos_transactions', JSON.stringify(txs));
       callback(txs);
     }, (err) => {
       console.error('Firestore transactions error:', err);
@@ -195,21 +194,21 @@ export function subscribeTransactions(callback: (t: FinancialTransaction[]) => v
     });
   }
   listeners.transactions.add(callback);
+  callback(getCollection('transactions', []));
   return () => { listeners.transactions.delete(callback); };
 }
 
 export function subscribeTablesComandas(callback: (t: TableComandaState[]) => void) {
-  callback(getCollection('tables', INITIAL_TABLES_COMANDAS));
   if (db) {
     return onSnapshot(collection(db, 'tables'), (snapshot) => {
       if (snapshot.empty) {
         INITIAL_TABLES_COMANDAS.forEach(t => setDoc(doc(db!, 'tables', t.id), cleanForFirestore(t)));
-        setCollection('tables', INITIAL_TABLES_COMANDAS, listeners.tables);
+        localStorage.setItem('fluxos_tables', JSON.stringify(INITIAL_TABLES_COMANDAS));
         callback(INITIAL_TABLES_COMANDAS);
       } else {
         const tables = snapshot.docs.map(d => d.data() as TableComandaState);
         tables.sort((a, b) => a.number - b.number);
-        setCollection('tables', tables, listeners.tables);
+        localStorage.setItem('fluxos_tables', JSON.stringify(tables));
         callback(tables);
       }
     }, (err) => {
@@ -218,20 +217,20 @@ export function subscribeTablesComandas(callback: (t: TableComandaState[]) => vo
     });
   }
   listeners.tables.add(callback);
+  callback(getCollection('tables', INITIAL_TABLES_COMANDAS));
   return () => { listeners.tables.delete(callback); };
 }
 
 export function subscribeUsers(callback: (u: CashierUser[]) => void) {
-  callback(getCollection('users', INITIAL_CASHIER_USERS));
   if (db) {
     return onSnapshot(collection(db, 'users'), (snapshot) => {
       if (snapshot.empty) {
         INITIAL_CASHIER_USERS.forEach(u => setDoc(doc(db!, 'users', u.id), cleanForFirestore(u)));
-        setCollection('users', INITIAL_CASHIER_USERS, listeners.users);
+        localStorage.setItem('fluxos_users', JSON.stringify(INITIAL_CASHIER_USERS));
         callback(INITIAL_CASHIER_USERS);
       } else {
         const users = snapshot.docs.map(d => d.data() as CashierUser);
-        setCollection('users', users, listeners.users);
+        localStorage.setItem('fluxos_users', JSON.stringify(users));
         callback(users);
       }
     }, (err) => {
@@ -240,6 +239,7 @@ export function subscribeUsers(callback: (u: CashierUser[]) => void) {
     });
   }
   listeners.users.add(callback);
+  callback(getCollection('users', INITIAL_CASHIER_USERS));
   return () => { listeners.users.delete(callback); };
 }
 
@@ -251,7 +251,7 @@ export async function fetchProductsFromDb(): Promise<Product[]> {
       const snap = await getDocs(collection(db, 'products'));
       if (!snap.empty) {
         const prods = snap.docs.map(d => d.data() as Product);
-        setCollection('products', prods, listeners.products);
+        localStorage.setItem('fluxos_products', JSON.stringify(prods));
         return prods;
       }
     } catch (err) {
@@ -262,11 +262,13 @@ export async function fetchProductsFromDb(): Promise<Product[]> {
 }
 
 export async function saveProductToDb(prod: Product): Promise<void> {
-  const list = getCollection('products', INITIAL_PRODUCTS);
-  const idx = list.findIndex(p => p.id === prod.id);
-  if (idx >= 0) list[idx] = prod;
-  else list.push(prod);
-  setCollection('products', list, listeners.products);
+  try {
+    const stored = localStorage.getItem('fluxos_products');
+    const list: Product[] = stored ? JSON.parse(stored) : [...INITIAL_PRODUCTS];
+    const idx = list.findIndex(p => p.id === prod.id);
+    if (idx >= 0) list[idx] = prod; else list.push(prod);
+    localStorage.setItem('fluxos_products', JSON.stringify(list));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -274,6 +276,10 @@ export async function saveProductToDb(prod: Product): Promise<void> {
     } catch (err) {
       console.error('Error saving product to Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_products');
+    const list = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+    listeners.products.forEach(cb => cb(list));
   }
 }
 
@@ -284,7 +290,7 @@ export async function fetchSalesFromDb(): Promise<Sale[]> {
       if (!snap.empty) {
         const sales = snap.docs.map(d => d.data() as Sale);
         sales.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setCollection('sales', sales, listeners.sales);
+        localStorage.setItem('fluxos_sales', JSON.stringify(sales));
         return sales;
       }
     } catch (err) {
@@ -295,11 +301,13 @@ export async function fetchSalesFromDb(): Promise<Sale[]> {
 }
 
 export async function saveSaleToDb(sale: Sale): Promise<void> {
-  const list = getCollection('sales', MOCK_SALES);
-  const idx = list.findIndex(s => s.id === sale.id);
-  if (idx >= 0) list[idx] = sale;
-  else list.push(sale);
-  setCollection('sales', list, listeners.sales);
+  try {
+    const stored = localStorage.getItem('fluxos_sales');
+    const list: Sale[] = stored ? JSON.parse(stored) : [];
+    const idx = list.findIndex(s => s.id === sale.id);
+    if (idx >= 0) list[idx] = sale; else list.push(sale);
+    localStorage.setItem('fluxos_sales', JSON.stringify(list));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -307,6 +315,10 @@ export async function saveSaleToDb(sale: Sale): Promise<void> {
     } catch (err) {
       console.error('Error saving sale to Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_sales');
+    const list = stored ? JSON.parse(stored) : MOCK_SALES;
+    listeners.sales.forEach(cb => cb(list));
   }
 }
 
@@ -316,7 +328,7 @@ export async function fetchSuppliersFromDb(): Promise<Supplier[]> {
       const snap = await getDocs(collection(db, 'suppliers'));
       if (!snap.empty) {
         const sups = snap.docs.map(d => d.data() as Supplier);
-        setCollection('suppliers', sups, listeners.suppliers);
+        localStorage.setItem('fluxos_suppliers', JSON.stringify(sups));
         return sups;
       }
     } catch (err) {
@@ -327,11 +339,13 @@ export async function fetchSuppliersFromDb(): Promise<Supplier[]> {
 }
 
 export async function saveSupplierToDb(sup: Supplier): Promise<void> {
-  const list = getCollection('suppliers', INITIAL_SUPPLIERS);
-  const idx = list.findIndex(s => s.id === sup.id);
-  if (idx >= 0) list[idx] = sup;
-  else list.push(sup);
-  setCollection('suppliers', list, listeners.suppliers);
+  try {
+    const stored = localStorage.getItem('fluxos_suppliers');
+    const list: Supplier[] = stored ? JSON.parse(stored) : [...INITIAL_SUPPLIERS];
+    const idx = list.findIndex(s => s.id === sup.id);
+    if (idx >= 0) list[idx] = sup; else list.push(sup);
+    localStorage.setItem('fluxos_suppliers', JSON.stringify(list));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -339,12 +353,20 @@ export async function saveSupplierToDb(sup: Supplier): Promise<void> {
     } catch (err) {
       console.error('Error saving supplier to Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_suppliers');
+    const list = stored ? JSON.parse(stored) : INITIAL_SUPPLIERS;
+    listeners.suppliers.forEach(cb => cb(list));
   }
 }
 
 export async function deleteSupplierFromDb(id: string): Promise<void> {
-  const list = getCollection('suppliers', INITIAL_SUPPLIERS).filter(s => s.id !== id);
-  setCollection('suppliers', list, listeners.suppliers);
+  try {
+    const stored = localStorage.getItem('fluxos_suppliers');
+    const list: Supplier[] = stored ? JSON.parse(stored) : [];
+    const filtered = list.filter(s => s.id !== id);
+    localStorage.setItem('fluxos_suppliers', JSON.stringify(filtered));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -352,6 +374,10 @@ export async function deleteSupplierFromDb(id: string): Promise<void> {
     } catch (err) {
       console.error('Error deleting supplier from Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_suppliers');
+    const list = stored ? JSON.parse(stored) : INITIAL_SUPPLIERS;
+    listeners.suppliers.forEach(cb => cb(list));
   }
 }
 
@@ -361,7 +387,7 @@ export async function fetchTransactionsFromDb(): Promise<FinancialTransaction[]>
       const snap = await getDocs(collection(db, 'transactions'));
       if (!snap.empty) {
         const txs = snap.docs.map(d => d.data() as FinancialTransaction);
-        setCollection('transactions', txs, listeners.transactions);
+        localStorage.setItem('fluxos_transactions', JSON.stringify(txs));
         return txs;
       }
     } catch (err) {
@@ -372,11 +398,13 @@ export async function fetchTransactionsFromDb(): Promise<FinancialTransaction[]>
 }
 
 export async function saveTransactionToDb(tx: FinancialTransaction): Promise<void> {
-  const list = getCollection('transactions', []);
-  const idx = list.findIndex(t => t.id === tx.id);
-  if (idx >= 0) list[idx] = tx;
-  else list.push(tx);
-  setCollection('transactions', list, listeners.transactions);
+  try {
+    const stored = localStorage.getItem('fluxos_transactions');
+    const list: FinancialTransaction[] = stored ? JSON.parse(stored) : [];
+    const idx = list.findIndex(t => t.id === tx.id);
+    if (idx >= 0) list[idx] = tx; else list.push(tx);
+    localStorage.setItem('fluxos_transactions', JSON.stringify(list));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -384,12 +412,20 @@ export async function saveTransactionToDb(tx: FinancialTransaction): Promise<voi
     } catch (err) {
       console.error('Error saving transaction to Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_transactions');
+    const list = stored ? JSON.parse(stored) : [];
+    listeners.transactions.forEach(cb => cb(list));
   }
 }
 
 export async function deleteTransactionFromDb(id: string): Promise<void> {
-  const list = getCollection('transactions', []).filter(t => t.id !== id);
-  setCollection('transactions', list, listeners.transactions);
+  try {
+    const stored = localStorage.getItem('fluxos_transactions');
+    const list: FinancialTransaction[] = stored ? JSON.parse(stored) : [];
+    const filtered = list.filter(t => t.id !== id);
+    localStorage.setItem('fluxos_transactions', JSON.stringify(filtered));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -397,6 +433,10 @@ export async function deleteTransactionFromDb(id: string): Promise<void> {
     } catch (err) {
       console.error('Error deleting transaction from Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_transactions');
+    const list = stored ? JSON.parse(stored) : [];
+    listeners.transactions.forEach(cb => cb(list));
   }
 }
 
@@ -407,7 +447,7 @@ export async function fetchTablesComandasFromDb(): Promise<TableComandaState[]> 
       if (!snap.empty) {
         const tables = snap.docs.map(d => d.data() as TableComandaState);
         tables.sort((a, b) => a.number - b.number);
-        setCollection('tables', tables, listeners.tables);
+        localStorage.setItem('fluxos_tables', JSON.stringify(tables));
         return tables;
       }
     } catch (err) {
@@ -418,11 +458,13 @@ export async function fetchTablesComandasFromDb(): Promise<TableComandaState[]> 
 }
 
 export async function saveTableComandaToDb(tc: TableComandaState): Promise<void> {
-  const list = getCollection('tables', INITIAL_TABLES_COMANDAS);
-  const idx = list.findIndex(t => t.id === tc.id);
-  if (idx >= 0) list[idx] = tc;
-  else list.push(tc);
-  setCollection('tables', list, listeners.tables);
+  try {
+    const stored = localStorage.getItem('fluxos_tables');
+    const list: TableComandaState[] = stored ? JSON.parse(stored) : [...INITIAL_TABLES_COMANDAS];
+    const idx = list.findIndex(t => t.id === tc.id);
+    if (idx >= 0) list[idx] = tc; else list.push(tc);
+    localStorage.setItem('fluxos_tables', JSON.stringify(list));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -430,12 +472,20 @@ export async function saveTableComandaToDb(tc: TableComandaState): Promise<void>
     } catch (err) {
       console.error('Error saving table to Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_tables');
+    const list = stored ? JSON.parse(stored) : INITIAL_TABLES_COMANDAS;
+    listeners.tables.forEach(cb => cb(list));
   }
 }
 
 export async function deleteTableComandaFromDb(id: string): Promise<void> {
-  const list = getCollection('tables', INITIAL_TABLES_COMANDAS).filter(s => s.id !== id);
-  setCollection('tables', list, listeners.tables);
+  try {
+    const stored = localStorage.getItem('fluxos_tables');
+    const list: TableComandaState[] = stored ? JSON.parse(stored) : [];
+    const filtered = list.filter(s => s.id !== id);
+    localStorage.setItem('fluxos_tables', JSON.stringify(filtered));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -443,6 +493,10 @@ export async function deleteTableComandaFromDb(id: string): Promise<void> {
     } catch (err) {
       console.error('Error deleting table from Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_tables');
+    const list = stored ? JSON.parse(stored) : INITIAL_TABLES_COMANDAS;
+    listeners.tables.forEach(cb => cb(list));
   }
 }
 
@@ -452,7 +506,7 @@ export async function fetchUsersFromDb(): Promise<CashierUser[]> {
       const snap = await getDocs(collection(db, 'users'));
       if (!snap.empty) {
         const users = snap.docs.map(d => d.data() as CashierUser);
-        setCollection('users', users, listeners.users);
+        localStorage.setItem('fluxos_users', JSON.stringify(users));
         return users;
       }
     } catch (err) {
@@ -463,11 +517,13 @@ export async function fetchUsersFromDb(): Promise<CashierUser[]> {
 }
 
 export async function saveUserToDb(user: CashierUser): Promise<void> {
-  const list = getCollection('users', INITIAL_CASHIER_USERS);
-  const idx = list.findIndex(u => u.id === user.id);
-  if (idx >= 0) list[idx] = user;
-  else list.push(user);
-  setCollection('users', list, listeners.users);
+  try {
+    const stored = localStorage.getItem('fluxos_users');
+    const list: CashierUser[] = stored ? JSON.parse(stored) : [...INITIAL_CASHIER_USERS];
+    const idx = list.findIndex(u => u.id === user.id);
+    if (idx >= 0) list[idx] = user; else list.push(user);
+    localStorage.setItem('fluxos_users', JSON.stringify(list));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -475,12 +531,20 @@ export async function saveUserToDb(user: CashierUser): Promise<void> {
     } catch (err) {
       console.error('Error saving user to Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_users');
+    const list = stored ? JSON.parse(stored) : INITIAL_CASHIER_USERS;
+    listeners.users.forEach(cb => cb(list));
   }
 }
 
 export async function deleteUserFromDb(id: string): Promise<void> {
-  const list = getCollection('users', INITIAL_CASHIER_USERS).filter(u => u.id !== id);
-  setCollection('users', list, listeners.users);
+  try {
+    const stored = localStorage.getItem('fluxos_users');
+    const list: CashierUser[] = stored ? JSON.parse(stored) : [];
+    const filtered = list.filter(u => u.id !== id);
+    localStorage.setItem('fluxos_users', JSON.stringify(filtered));
+  } catch (e) {}
 
   if (db) {
     try {
@@ -488,5 +552,9 @@ export async function deleteUserFromDb(id: string): Promise<void> {
     } catch (err) {
       console.error('Error deleting user from Firestore:', err);
     }
+  } else {
+    const stored = localStorage.getItem('fluxos_users');
+    const list = stored ? JSON.parse(stored) : INITIAL_CASHIER_USERS;
+    listeners.users.forEach(cb => cb(list));
   }
 }
