@@ -1019,9 +1019,17 @@ export default function App() {
           return acc + ((prod ? prod.sellPrice : 0) * i.quantity);
         }, 0);
 
+        let newStatus = tbl.status;
+        if (items.length > 0 && tbl.status === 'livre') {
+          newStatus = 'ocupada';
+        } else if (items.length === 0) {
+          newStatus = 'livre';
+        }
+
         const uTbl = {
           ...tbl,
           items,
+          status: newStatus,
           subtotal
         };
         saveTableComandaToDb(uTbl);

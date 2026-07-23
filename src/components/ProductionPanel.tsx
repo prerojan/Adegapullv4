@@ -185,8 +185,7 @@ export default function ProductionPanel({
     }[] = [];
 
     tablesComandas.forEach(table => {
-      if (table.status === 'livre') return;
-      if (!table.items) return;
+      if (!table.items || table.items.length === 0) return;
 
       table.items.forEach((item, idx) => {
         const prod = products.find(p => p.id === item.productId);
