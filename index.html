@@ -48,22 +48,10 @@
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js')
             .then(function(reg) {
-              console.log('[FluxOS] ServiceWorker registered:', reg.scope);
-              reg.update(); // Check for sw updates on every page load
-              reg.onupdatefound = function() {
-                var installingWorker = reg.installing;
-                if (installingWorker) {
-                  installingWorker.onstatechange = function() {
-                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      console.log('[FluxOS] Nova versão encontrada. Atualizando cache...');
-                      window.location.reload();
-                    }
-                  };
-                }
-              };
+              console.log('[FluxOS] ServiceWorker registrado com sucesso:', reg.scope);
             })
             .catch(function(err) {
-              console.error('[FluxOS] ServiceWorker registration failed:', err);
+              console.error('[FluxOS] Falha ao registrar ServiceWorker:', err);
             });
         });
       }
