@@ -1,0 +1,6 @@
+{
+  "name": "FluxOS",
+  "description": "Sistema de gestão operacional para adegas, bares, distribuidoras e comércios com controle de estoque e vendas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
