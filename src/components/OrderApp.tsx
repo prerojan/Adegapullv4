@@ -311,7 +311,6 @@ export default function OrderApp({
     });
 
     onUpdateTableItems(selectedTableId, updatedItems);
-    onUpdateTableStatus(selectedTableId, 'ocupada');
     setOrderCart([]);
     
     // Notify

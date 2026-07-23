@@ -26,12 +26,12 @@ const getEnv = (key: string): string => {
   return '';
 };
 
-const apiKey = getEnv('VITE_FIREBASE_API_KEY');
-const projectId = getEnv('VITE_FIREBASE_PROJECT_ID');
-const authDomain = getEnv('VITE_FIREBASE_AUTH_DOMAIN');
-const storageBucket = getEnv('VITE_FIREBASE_STORAGE_BUCKET');
-const messagingSenderId = getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID');
-const appId = getEnv('VITE_FIREBASE_APP_ID');
+const apiKey = getEnv('VITE_FIREBASE_API_KEY') || 'AIzaSyDl6RiKkdWSJTb2Qi1cHKXX45j5HUNxnAU';
+const projectId = getEnv('VITE_FIREBASE_PROJECT_ID') || 'adegaos-bc0ff';
+const authDomain = getEnv('VITE_FIREBASE_AUTH_DOMAIN') || 'adegaos-bc0ff.firebaseapp.com';
+const storageBucket = getEnv('VITE_FIREBASE_STORAGE_BUCKET') || 'adegaos-bc0ff.firebasestorage.app';
+const messagingSenderId = getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') || '303265966754';
+const appId = getEnv('VITE_FIREBASE_APP_ID') || '1:303265966754:web:098e6dfac893e02f0b45fb';
 
 export const isFirebaseEnabled = Boolean(apiKey && projectId);
 
@@ -57,7 +57,13 @@ if (isFirebaseEnabled) {
   }
 }
 
-// Fallback LocalStorage State Listeners (when Firebase is disabled)
+// Helper to remove undefined properties before saving to Firestore (Firestore rejects undefined)
+function cleanForFirestore<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  return JSON.parse(JSON.stringify(obj, (_key, value) => (value === undefined ? null : value)));
+}
+
+// Fallback LocalStorage State Listeners (when Firebase is disabled or multi-tab local)
 const listeners = {
   products: new Set<(data: Product[]) => void>(),
   sales: new Set<(data: Sale[]) => void>(),
@@ -66,6 +72,20 @@ const listeners = {
   tables: new Set<(data: TableComandaState[]) => void>(),
   users: new Set<(data: CashierUser[]) => void>()
 };
+
+const syncChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window ? new BroadcastChannel('fluxos_sync_channel') : null;
+
+if (syncChannel) {
+  syncChannel.onmessage = (event) => {
+    const { key, data } = event.data || {};
+    if (key && data && (listeners as any)[key]) {
+      try {
+        localStorage.setItem(`fluxos_${key}`, JSON.stringify(data));
+      } catch (e) {}
+      (listeners as any)[key].forEach((cb: any) => cb([...data]));
+    }
+  };
+}
 
 function getCollection<T>(key: string, initialData: T[]): T[] {
   try {
@@ -87,15 +107,21 @@ function setCollection<T>(key: string, data: T[], listenerSet: Set<(data: T[]) =
     console.error(`Error saving collection ${key}:`, err);
   }
   listenerSet.forEach(cb => cb([...data]));
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({ key, data });
+    } catch (e) {}
+  }
 }
 
 // ================= SUBSCRIPTION METHODS (REAL-TIME INSTANT SYNC) =================
 
 export function subscribeProducts(callback: (p: Product[]) => void) {
+  callback(getCollection('products', INITIAL_PRODUCTS));
   if (db) {
     return onSnapshot(collection(db, 'products'), (snapshot) => {
       if (snapshot.empty) {
-        INITIAL_PRODUCTS.forEach(p => setDoc(doc(db!, 'products', p.id), p, { merge: true }));
+        INITIAL_PRODUCTS.forEach(p => setDoc(doc(db!, 'products', p.id), cleanForFirestore(p)));
         setCollection('products', INITIAL_PRODUCTS, listeners.products);
         callback(INITIAL_PRODUCTS);
       } else {
@@ -109,11 +135,11 @@ export function subscribeProducts(callback: (p: Product[]) => void) {
     });
   }
   listeners.products.add(callback);
-  callback(getCollection('products', INITIAL_PRODUCTS));
   return () => { listeners.products.delete(callback); };
 }
 
 export function subscribeSales(callback: (s: Sale[]) => void) {
+  callback(getCollection('sales', MOCK_SALES));
   if (db) {
     return onSnapshot(collection(db, 'sales'), (snapshot) => {
       if (snapshot.empty) {
@@ -131,15 +157,15 @@ export function subscribeSales(callback: (s: Sale[]) => void) {
     });
   }
   listeners.sales.add(callback);
-  callback(getCollection('sales', MOCK_SALES));
   return () => { listeners.sales.delete(callback); };
 }
 
 export function subscribeSuppliers(callback: (s: Supplier[]) => void) {
+  callback(getCollection('suppliers', INITIAL_SUPPLIERS));
   if (db) {
     return onSnapshot(collection(db, 'suppliers'), (snapshot) => {
       if (snapshot.empty) {
-        INITIAL_SUPPLIERS.forEach(s => setDoc(doc(db!, 'suppliers', s.id), s, { merge: true }));
+        INITIAL_SUPPLIERS.forEach(s => setDoc(doc(db!, 'suppliers', s.id), cleanForFirestore(s)));
         setCollection('suppliers', INITIAL_SUPPLIERS, listeners.suppliers);
         callback(INITIAL_SUPPLIERS);
       } else {
@@ -153,11 +179,11 @@ export function subscribeSuppliers(callback: (s: Supplier[]) => void) {
     });
   }
   listeners.suppliers.add(callback);
-  callback(getCollection('suppliers', INITIAL_SUPPLIERS));
   return () => { listeners.suppliers.delete(callback); };
 }
 
 export function subscribeTransactions(callback: (t: FinancialTransaction[]) => void) {
+  callback(getCollection('transactions', []));
   if (db) {
     return onSnapshot(collection(db, 'transactions'), (snapshot) => {
       const txs = snapshot.docs.map(d => d.data() as FinancialTransaction);
@@ -169,15 +195,15 @@ export function subscribeTransactions(callback: (t: FinancialTransaction[]) => v
     });
   }
   listeners.transactions.add(callback);
-  callback(getCollection('transactions', []));
   return () => { listeners.transactions.delete(callback); };
 }
 
 export function subscribeTablesComandas(callback: (t: TableComandaState[]) => void) {
+  callback(getCollection('tables', INITIAL_TABLES_COMANDAS));
   if (db) {
     return onSnapshot(collection(db, 'tables'), (snapshot) => {
       if (snapshot.empty) {
-        INITIAL_TABLES_COMANDAS.forEach(t => setDoc(doc(db!, 'tables', t.id), t, { merge: true }));
+        INITIAL_TABLES_COMANDAS.forEach(t => setDoc(doc(db!, 'tables', t.id), cleanForFirestore(t)));
         setCollection('tables', INITIAL_TABLES_COMANDAS, listeners.tables);
         callback(INITIAL_TABLES_COMANDAS);
       } else {
@@ -192,15 +218,15 @@ export function subscribeTablesComandas(callback: (t: TableComandaState[]) => vo
     });
   }
   listeners.tables.add(callback);
-  callback(getCollection('tables', INITIAL_TABLES_COMANDAS));
   return () => { listeners.tables.delete(callback); };
 }
 
 export function subscribeUsers(callback: (u: CashierUser[]) => void) {
+  callback(getCollection('users', INITIAL_CASHIER_USERS));
   if (db) {
     return onSnapshot(collection(db, 'users'), (snapshot) => {
       if (snapshot.empty) {
-        INITIAL_CASHIER_USERS.forEach(u => setDoc(doc(db!, 'users', u.id), u, { merge: true }));
+        INITIAL_CASHIER_USERS.forEach(u => setDoc(doc(db!, 'users', u.id), cleanForFirestore(u)));
         setCollection('users', INITIAL_CASHIER_USERS, listeners.users);
         callback(INITIAL_CASHIER_USERS);
       } else {
@@ -214,7 +240,6 @@ export function subscribeUsers(callback: (u: CashierUser[]) => void) {
     });
   }
   listeners.users.add(callback);
-  callback(getCollection('users', INITIAL_CASHIER_USERS));
   return () => { listeners.users.delete(callback); };
 }
 
@@ -245,7 +270,7 @@ export async function saveProductToDb(prod: Product): Promise<void> {
 
   if (db) {
     try {
-      await setDoc(doc(db, 'products', prod.id), prod, { merge: true });
+      await setDoc(doc(db, 'products', prod.id), cleanForFirestore(prod));
     } catch (err) {
       console.error('Error saving product to Firestore:', err);
     }
@@ -278,7 +303,7 @@ export async function saveSaleToDb(sale: Sale): Promise<void> {
 
   if (db) {
     try {
-      await setDoc(doc(db, 'sales', sale.id), sale, { merge: true });
+      await setDoc(doc(db, 'sales', sale.id), cleanForFirestore(sale));
     } catch (err) {
       console.error('Error saving sale to Firestore:', err);
     }
@@ -310,7 +335,7 @@ export async function saveSupplierToDb(sup: Supplier): Promise<void> {
 
   if (db) {
     try {
-      await setDoc(doc(db, 'suppliers', sup.id), sup, { merge: true });
+      await setDoc(doc(db, 'suppliers', sup.id), cleanForFirestore(sup));
     } catch (err) {
       console.error('Error saving supplier to Firestore:', err);
     }
@@ -355,7 +380,7 @@ export async function saveTransactionToDb(tx: FinancialTransaction): Promise<voi
 
   if (db) {
     try {
-      await setDoc(doc(db, 'transactions', tx.id), tx, { merge: true });
+      await setDoc(doc(db, 'transactions', tx.id), cleanForFirestore(tx));
     } catch (err) {
       console.error('Error saving transaction to Firestore:', err);
     }
@@ -401,7 +426,7 @@ export async function saveTableComandaToDb(tc: TableComandaState): Promise<void>
 
   if (db) {
     try {
-      await setDoc(doc(db, 'tables', tc.id), tc, { merge: true });
+      await setDoc(doc(db, 'tables', tc.id), cleanForFirestore(tc));
     } catch (err) {
       console.error('Error saving table to Firestore:', err);
     }
@@ -409,7 +434,7 @@ export async function saveTableComandaToDb(tc: TableComandaState): Promise<void>
 }
 
 export async function deleteTableComandaFromDb(id: string): Promise<void> {
-  const list = getCollection('tables', INITIAL_TABLES_COMANDAS).filter(t => t.id !== id);
+  const list = getCollection('tables', INITIAL_TABLES_COMANDAS).filter(s => s.id !== id);
   setCollection('tables', list, listeners.tables);
 
   if (db) {
@@ -446,7 +471,7 @@ export async function saveUserToDb(user: CashierUser): Promise<void> {
 
   if (db) {
     try {
-      await setDoc(doc(db, 'users', user.id), user, { merge: true });
+      await setDoc(doc(db, 'users', user.id), cleanForFirestore(user));
     } catch (err) {
       console.error('Error saving user to Firestore:', err);
     }
