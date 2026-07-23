@@ -385,7 +385,7 @@ export default function ManagerDashboard({
               Faturamento Bruto
             </p>
             <p className={`text-xl font-black font-mono tracking-tight mt-2 ${isDark ? 'text-gray-100' : 'text-slate-900'}`}>
-              R$ {stats.totalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {(stats?.totalSales || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
             <span className={`text-[9px] block mt-1 ${isDark ? 'text-gray-400' : 'text-slate-500 font-medium'}`}>Período selecionado</span>
           </div>
@@ -406,7 +406,7 @@ export default function ManagerDashboard({
               Custos e Despesas
             </p>
             <p className={`text-xl font-black font-mono tracking-tight mt-2 ${isDark ? 'text-gray-100' : 'text-slate-900'}`}>
-              R$ {stats.totalExpenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {(stats?.totalExpenses || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
             <span className={`text-[9px] block mt-1 ${isDark ? 'text-gray-400' : 'text-slate-500 font-medium'}`}>Pagos no período</span>
           </div>
@@ -427,9 +427,9 @@ export default function ManagerDashboard({
               Lucro Líquido
             </p>
             <p className={`text-xl font-black font-mono tracking-tight mt-2 ${
-              stats.netProfit >= 0 ? (isDark ? 'text-sky-400' : 'text-sky-700') : 'text-rose-600'
+              (stats?.netProfit || 0) >= 0 ? (isDark ? 'text-sky-400' : 'text-sky-700') : 'text-rose-600'
             }`}>
-              R$ {stats.netProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {(stats?.netProfit || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
             <span className={`text-[9px] block mt-1 ${isDark ? 'text-gray-400' : 'text-slate-500 font-medium'}`}>Margem operacional</span>
           </div>
@@ -545,7 +545,7 @@ export default function ManagerDashboard({
             </div>
             <div className="text-right">
               <span className={`text-xs font-black font-mono ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
-                R$ {stats.totalSales.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                R$ {(stats?.totalSales || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
               </span>
             </div>
           </div>
@@ -635,7 +635,7 @@ export default function ManagerDashboard({
                 <div className="absolute flex flex-col items-center">
                   <span className={`text-[9px] uppercase font-bold tracking-wider ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>Total</span>
                   <span className={`text-xs font-mono font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    R$ {stats.totalSales.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                    R$ {(stats?.totalSales || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
               </div>
@@ -769,7 +769,7 @@ export default function ManagerDashboard({
                         {p.qty} un
                       </p>
                       <p className={`text-[10px] font-mono font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-700'}`}>
-                        R$ {p.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(p?.revenue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                     </div>
                   </div>

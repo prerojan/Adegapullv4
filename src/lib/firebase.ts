@@ -198,6 +198,18 @@ export function subscribeTransactions(callback: (t: FinancialTransaction[]) => v
   return () => { listeners.transactions.delete(callback); };
 }
 
+function sanitizeTable(t: any): TableComandaState {
+  return {
+    id: t?.id || `tbl_${Math.random()}`,
+    type: t?.type || 'mesa',
+    number: typeof t?.number === 'number' ? t.number : 1,
+    tableName: t?.tableName || '',
+    status: t?.status || 'livre',
+    items: Array.isArray(t?.items) ? t.items : [],
+    subtotal: typeof t?.subtotal === 'number' ? t.subtotal : 0
+  };
+}
+
 export function subscribeTablesComandas(callback: (t: TableComandaState[]) => void) {
   if (db) {
     return onSnapshot(collection(db, 'tables'), (snapshot) => {
@@ -206,18 +218,20 @@ export function subscribeTablesComandas(callback: (t: TableComandaState[]) => vo
         localStorage.setItem('fluxos_tables', JSON.stringify(INITIAL_TABLES_COMANDAS));
         callback(INITIAL_TABLES_COMANDAS);
       } else {
-        const tables = snapshot.docs.map(d => d.data() as TableComandaState);
+        const tables = snapshot.docs.map(d => sanitizeTable(d.data()));
         tables.sort((a, b) => a.number - b.number);
         localStorage.setItem('fluxos_tables', JSON.stringify(tables));
         callback(tables);
       }
     }, (err) => {
       console.error('Firestore tables error:', err);
-      callback(getCollection('tables', INITIAL_TABLES_COMANDAS));
+      const tables = getCollection('tables', INITIAL_TABLES_COMANDAS).map(sanitizeTable);
+      callback(tables);
     });
   }
   listeners.tables.add(callback);
-  callback(getCollection('tables', INITIAL_TABLES_COMANDAS));
+  const tables = getCollection('tables', INITIAL_TABLES_COMANDAS).map(sanitizeTable);
+  callback(tables);
   return () => { listeners.tables.delete(callback); };
 }
 
@@ -445,7 +459,7 @@ export async function fetchTablesComandasFromDb(): Promise<TableComandaState[]> 
     try {
       const snap = await getDocs(collection(db, 'tables'));
       if (!snap.empty) {
-        const tables = snap.docs.map(d => d.data() as TableComandaState);
+        const tables = snap.docs.map(d => sanitizeTable(d.data()));
         tables.sort((a, b) => a.number - b.number);
         localStorage.setItem('fluxos_tables', JSON.stringify(tables));
         return tables;
@@ -454,7 +468,7 @@ export async function fetchTablesComandasFromDb(): Promise<TableComandaState[]> 
       console.error('Error fetching tables from Firestore:', err);
     }
   }
-  return getCollection('tables', INITIAL_TABLES_COMANDAS);
+  return getCollection('tables', INITIAL_TABLES_COMANDAS).map(sanitizeTable);
 }
 
 export async function saveTableComandaToDb(tc: TableComandaState): Promise<void> {

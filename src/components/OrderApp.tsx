@@ -772,7 +772,7 @@ export default function OrderApp({
                         <div className="flex flex-col gap-0.5 mt-2">
                           <span className="text-[9px] text-gray-400 font-mono">Consumo: {itemsCount} un</span>
                           <span className="font-mono text-xs font-black" style={{ color: theme === 'dark' ? '#18F2A4' : '#10B981' }}>
-                            R$ {tbl.subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            R$ {(tbl.subtotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
                       ) : (
@@ -1089,7 +1089,7 @@ export default function OrderApp({
                   </div>
                   <div className="flex justify-between items-center font-bold pt-2 border-t border-dashed border-gray-800">
                     <span>SUBTOTAL DA COMANDA:</span>
-                    <span className="font-mono text-[#18F2A4] text-base">R$ {activeTable?.subtotal.toFixed(2)}</span>
+                    <span className="font-mono text-[#18F2A4] text-base">R$ {(activeTable?.subtotal || 0).toFixed(2)}</span>
                   </div>
                 </div>
 

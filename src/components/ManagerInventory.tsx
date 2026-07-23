@@ -685,7 +685,7 @@ export default function ManagerInventory({
               </div>
               <div className="text-right font-mono shrink-0">
                 <span className="font-black text-sm block" style={{ color: theme === 'dark' ? 'white' : '#111' }}>{log.qtyChanged}</span>
-                <span className={`text-[9px] font-semibold ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>{new Date(log.timestamp).toLocaleString('pt-BR')}</span>
+                <span className={`text-[9px] font-semibold ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>{log.timestamp ? new Date(log.timestamp).toLocaleString('pt-BR') : 'N/A'}</span>
               </div>
             </div>
           ))}

@@ -54,11 +54,11 @@ export default function ManagerReports({
         headers = ['ID Venda', 'Data/Hora', 'Operador', 'Método', 'Desconto', 'Total (R$)'];
         rows = paidSales.map(s => [
           `#${s.number}`,
-          new Date(s.timestamp).toLocaleString('pt-BR'),
-          s.cashierId,
-          s.paymentMethod.toUpperCase(),
-          `R$ ${s.discount.toFixed(2)}`,
-          `R$ ${s.total.toFixed(2)}`
+          s.timestamp ? new Date(s.timestamp).toLocaleString('pt-BR') : 'N/A',
+          s.cashierId || 'Sistema',
+          (s.paymentMethod || '').toUpperCase(),
+          `R$ ${(s.discount || 0).toFixed(2)}`,
+          `R$ ${(s.total || 0).toFixed(2)}`
         ]);
 
       } else if (reportId === 'r2') {
@@ -187,10 +187,10 @@ export default function ManagerReports({
         const rowsSales = cancelledSales.map(s => [
           `#${s.number}`,
           'Venda Cancelada',
-          new Date(s.timestamp).toLocaleString('pt-BR'),
+          s.timestamp ? new Date(s.timestamp).toLocaleString('pt-BR') : 'N/A',
           'Balcão PDV',
-          s.cashierId,
-          `R$ ${s.total.toFixed(2)}`
+          s.cashierId || 'Sistema',
+          `R$ ${(s.total || 0).toFixed(2)}`
         ]);
 
         const rowsRefunds = refundTransactions.map(tx => [

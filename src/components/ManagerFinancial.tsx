@@ -377,7 +377,7 @@ export default function ManagerFinancial({
               theme === 'dark' ? 'bg-[#111111] border-[#1A1A1A]' : 'bg-white border-gray-200'
             }`}>
               <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Total Receitas Liquidadas</span>
-              <span className="text-xl font-bold font-mono text-emerald-500">R$ {financials.cashIn.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              <span className="text-xl font-bold font-mono text-emerald-500">R$ {(financials?.cashIn || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               <span className="text-[9px] text-gray-400 mt-1 flex items-center gap-1">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                 Vendas e outras receitas recebidas
@@ -389,7 +389,7 @@ export default function ManagerFinancial({
               theme === 'dark' ? 'bg-[#111111] border-[#1A1A1A]' : 'bg-white border-gray-200'
             }`}>
               <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Total Despesas Pagas</span>
-              <span className="text-xl font-bold font-mono text-red-500">R$ {financials.cashOut.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              <span className="text-xl font-bold font-mono text-red-500">R$ {(financials?.cashOut || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               <span className="text-[9px] text-gray-400 mt-1 flex items-center gap-1">
                 <TrendingDown className="w-3.5 h-3.5 text-red-500" />
                 Fornecedores e custos operacionais liquidados
@@ -401,8 +401,8 @@ export default function ManagerFinancial({
               theme === 'dark' ? 'bg-[#111111] border-[#1A1A1A]' : 'bg-white border-gray-200'
             }`}>
               <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Saldo Líquido em Caixa</span>
-              <span className={`text-xl font-bold font-mono ${financials.netBalance >= 0 ? (theme === 'dark' ? 'text-[#18F2A4]' : 'text-emerald-600') : 'text-red-500'}`}>
-                R$ {financials.netBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              <span className={`text-xl font-bold font-mono ${(financials?.netBalance || 0) >= 0 ? (theme === 'dark' ? 'text-[#18F2A4]' : 'text-emerald-600') : 'text-red-500'}`}>
+                R$ {(financials?.netBalance || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
               <span className="text-[9px] text-gray-400 mt-1 flex items-center gap-1">
                 <Landmark className="w-3.5 h-3.5 text-sky-400" />
@@ -475,7 +475,7 @@ export default function ManagerFinancial({
                             ? theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'
                             : 'text-red-500'
                         }`}>
-                          {tx.type === 'receita' ? '+' : '-'} R$ {tx.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {tx.type === 'receita' ? '+' : '-'} R$ {(tx.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-1 text-center whitespace-nowrap">
                           {tx.status === 'pago' ? (
@@ -534,18 +534,18 @@ export default function ManagerFinancial({
                 <div className="flex flex-col gap-2.5 text-xs">
                   <div className={`flex justify-between items-baseline p-2.5 rounded-lg border ${theme === 'dark' ? 'bg-black/20 border-[#1A1A1A]' : 'bg-gray-50 border-gray-200'}`}>
                     <span className={theme === 'dark' ? 'text-gray-400' : 'text-gray-600 font-medium'}>Espécie (Gaveta):</span>
-                    <span className={`font-mono font-bold whitespace-nowrap ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'}`}>R$ {cashStats.expected.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span className={`font-mono font-bold whitespace-nowrap ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'}`}>R$ {(cashStats?.expected || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className={`flex justify-between items-baseline p-2.5 rounded-lg border ${theme === 'dark' ? 'bg-black/20 border-[#1A1A1A]' : 'bg-gray-50 border-gray-200'}`}>
                     <span className={theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}>Maquininha Stone (Cartões):</span>
                     <span className={`font-mono font-bold whitespace-nowrap ${theme === 'dark' ? 'text-[#18F2A4]' : 'text-[#10B981]'}`}>
-                      R$ {(sales.filter(s => s.status === 'pago' && ['debito', 'credito'].includes(s.paymentMethod)).reduce((acc, s) => acc + s.total, 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      R$ {((sales || []).filter(s => s?.status === 'pago' && ['debito', 'credito'].includes(s?.paymentMethod)).reduce((acc, s) => acc + (s?.total || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div className={`flex justify-between items-baseline p-2.5 rounded-lg border ${theme === 'dark' ? 'bg-black/20 border-[#1A1A1A]' : 'bg-gray-50 border-gray-200'}`}>
                     <span className={theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}>Chave PIX (Banco):</span>
                     <span className={`font-mono font-bold whitespace-nowrap ${theme === 'dark' ? 'text-[#18F2A4]' : 'text-[#10B981]'}`}>
-                      R$ {(sales.filter(s => s.status === 'pago' && s.paymentMethod === 'pix').reduce((acc, s) => acc + s.total, 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      R$ {((sales || []).filter(s => s?.status === 'pago' && s?.paymentMethod === 'pix').reduce((acc, s) => acc + (s?.total || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
@@ -573,62 +573,62 @@ export default function ManagerFinancial({
             {/* 1. Receita Bruta */}
             <div className="flex justify-between items-center py-2.5 border-b border-[#1C1C1C]" style={{ borderColor: theme === 'dark' ? '#1C1C1C' : '#E5E5E5' }}>
               <span className="font-semibold text-gray-200 uppercase tracking-wider" style={{ color: theme === 'dark' ? 'white' : '#111' }}>(=) RECEITA OPERACIONAL BRUTA</span>
-              <span className="font-mono font-bold text-sm whitespace-nowrap">R$ {dreData.faturamentoBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="font-mono font-bold text-sm whitespace-nowrap">R$ {(dreData?.faturamentoBruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between items-center pl-4 text-gray-400">
               <span>(+) Faturamento de Vendas</span>
-              <span className="font-mono whitespace-nowrap">R$ {(dreData.faturamentoBruto - dreData.otherRevenues).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="font-mono whitespace-nowrap">R$ {((dreData?.faturamentoBruto || 0) - (dreData?.otherRevenues || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
-            {dreData.otherRevenues > 0 && (
+            {(dreData?.otherRevenues || 0) > 0 && (
               <div className="flex justify-between items-center pl-4 text-gray-400">
                 <span>(+) Outras Receitas</span>
-                <span className="font-mono whitespace-nowrap">R$ {dreData.otherRevenues.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="font-mono whitespace-nowrap">R$ {(dreData?.otherRevenues || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             )}
 
             {/* 2. Deduções / CMV */}
             <div className="flex justify-between items-center py-2.5 border-b border-[#1C1C1C] text-red-400" style={{ borderColor: theme === 'dark' ? '#1C1C1C' : '#E5E5E5' }}>
               <span className="font-semibold uppercase tracking-wider">(-) CUSTO DE MERCADORIA VENDIDA (CMV)</span>
-              <span className="font-mono font-bold whitespace-nowrap">- R$ {dreData.totalCmv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="font-mono font-bold whitespace-nowrap">- R$ {(dreData?.totalCmv || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
 
             {/* 3. Margem de Contribuição */}
             <div className="flex justify-between items-center py-2.5 border-b" style={{ borderColor: theme === 'dark' ? '#1C1C1C' : '#E5E5E5' }}>
               <span className="font-semibold uppercase tracking-wider" style={{ color: theme === 'dark' ? '#18F2A4' : '#15803d' }}>(=) MARGEM DE CONTRIBUIÇÃO BRUTA</span>
               <div className="flex gap-4 font-mono font-bold items-center">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold ${theme === 'dark' ? 'bg-[#18F2A4]/15 text-[#18F2A4]' : 'bg-emerald-100 text-emerald-900 border border-emerald-200'}`}>{dreData.margemPercent.toFixed(1)}%</span>
-                <span className="whitespace-nowrap font-black" style={{ color: theme === 'dark' ? '#18F2A4' : '#15803d' }}>R$ {dreData.margemContribuicao.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold ${theme === 'dark' ? 'bg-[#18F2A4]/15 text-[#18F2A4]' : 'bg-emerald-100 text-emerald-900 border border-emerald-200'}`}>{(dreData?.margemPercent || 0).toFixed(1)}%</span>
+                <span className="whitespace-nowrap font-black" style={{ color: theme === 'dark' ? '#18F2A4' : '#15803d' }}>R$ {(dreData?.margemContribuicao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
 
             {/* 4. Despesas Fixas */}
             <div className={`flex justify-between items-center py-2.5 border-b ${theme === 'dark' ? 'border-[#1C1C1C] text-red-400' : 'border-gray-200 text-red-600 font-medium'}`}>
               <span className="font-semibold uppercase tracking-wider">(-) DESPESAS FIXAS OPERACIONAIS</span>
-              <span className="font-mono font-bold whitespace-nowrap">- R$ {dreData.despesasFixas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="font-mono font-bold whitespace-nowrap">- R$ {(dreData?.despesasFixas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
 
             {/* 5. Despesas Variáveis */}
             <div className={`flex justify-between items-center py-2.5 border-b ${theme === 'dark' ? 'border-[#1C1C1C] text-red-400' : 'border-gray-200 text-red-600 font-medium'}`}>
               <span className="font-semibold uppercase tracking-wider">(-) DESPESAS VARIÁVEIS / TAXAS</span>
-              <span className="font-mono font-bold whitespace-nowrap">- R$ {dreData.despesasVariaveis.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="font-mono font-bold whitespace-nowrap">- R$ {(dreData?.despesasVariaveis || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
 
             {/* 6. Lucro Líquido */}
             <div className={`flex justify-between items-center py-3 border-y-2 border-dashed mt-4 text-sm font-bold ${
-              dreData.lucroLiquido >= 0 
+              (dreData?.lucroLiquido || 0) >= 0 
                 ? theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700' 
                 : theme === 'dark' ? 'text-red-400' : 'text-red-600'
             }`} style={{ borderColor: theme === 'dark' ? '#1A1A1A' : '#E5E5E5' }}>
               <span className="uppercase tracking-wider">(=) RESULTADO LÍQUIDO DO PERÍODO</span>
               <div className="flex gap-4 font-mono font-black items-center">
                 <span className={`text-xs px-1.5 py-0.5 rounded uppercase font-extrabold border ${
-                  dreData.lucroLiquido >= 0 
+                  (dreData?.lucroLiquido || 0) >= 0 
                     ? theme === 'dark' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30' : 'bg-emerald-100 text-emerald-900 border-emerald-200' 
                     : theme === 'dark' ? 'bg-red-950/40 text-red-400 border-red-900/30' : 'bg-red-100 text-red-900 border-red-200'
                 }`}>
-                  Rentab: {dreData.rentabilidade.toFixed(1)}%
+                  Rentab: {(dreData?.rentabilidade || 0).toFixed(1)}%
                 </span>
-                <span className="whitespace-nowrap text-base">R$ {dreData.lucroLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="whitespace-nowrap text-base">R$ {(dreData?.lucroLiquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           </div>
@@ -723,7 +723,7 @@ export default function ManagerFinancial({
                 <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: theme === 'dark' ? '#1C1C1C' : '#E5E5E5' }}>
                   <span className="text-xs font-bold text-gray-400">TOTAL FÍSICO CONTADO:</span>
                   <span className={`text-lg font-black font-mono ${theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'}`}>
-                    R$ {physicalCountedCash.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    R$ {(physicalCountedCash || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
 
@@ -731,19 +731,19 @@ export default function ManagerFinancial({
                 <div className="flex flex-col gap-2 text-[11px] font-mono">
                   <div className="flex justify-between">
                     <span className="text-gray-400">(+) Vendas em Dinheiro:</span>
-                    <span className="font-bold">R$ {cashStats.sales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span className="font-bold">R$ {(cashStats?.sales || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">(+) Entradas/Aportes manuais:</span>
-                    <span className="font-bold">R$ {cashStats.entries.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span className="font-bold">R$ {(cashStats?.entries || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-red-400">
                     <span>(-) Saídas/Sangrias manuais:</span>
-                    <span>- R$ {cashStats.withdrawals.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span>- R$ {(cashStats?.withdrawals || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2 font-bold" style={{ borderColor: theme === 'dark' ? '#1C1C1C' : '#E5E5E5' }}>
                     <span className="text-gray-400">(=) SALDO ESPERADO NO SISTEMA:</span>
-                    <span>R$ {cashStats.expected.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span>R$ {(cashStats?.expected || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
 

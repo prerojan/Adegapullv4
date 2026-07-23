@@ -697,7 +697,7 @@ export default function AdminPanel({
                   <div className="flex flex-col">
                     <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">MMR da Plataforma</span>
                     <span className={`text-2xl font-extrabold mt-1.5 font-mono ${theme === 'dark' ? 'text-white' : 'text-gray-950'}`}>
-                      R$ {platformMMR.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {(platformMMR || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                     <span className="text-[9px] text-emerald-400 font-bold block mt-1">✓ Licenças ativas recalculadas</span>
                   </div>
@@ -731,7 +731,7 @@ export default function AdminPanel({
                   <div className="flex flex-col">
                     <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Vendas Sincronizadas</span>
                     <span className={`text-2xl font-extrabold mt-1.5 font-mono ${theme === 'dark' ? 'text-white' : 'text-gray-950'}`}>
-                      {totalOrdersProcessed.toLocaleString('pt-BR')} Transações
+                      {(totalOrdersProcessed || 0).toLocaleString('pt-BR')} Transações
                     </span>
                     <span className="text-[9px] text-emerald-400 font-bold block mt-1">✓ Sem perdas no banco central</span>
                   </div>
