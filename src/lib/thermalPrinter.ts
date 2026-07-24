@@ -1,23 +1,41 @@
-// Thermal Printer Engine for FluxOS
-// Real Hardware Discovery (WebUSB, WebSerial), Real Spooler Queue, Real ESC/POS Binary Generator & Hardware Diagnostics.
+// FluxOS Thermal Printer Engine - Refactored ESC/POS & Document Matrix Architecture
+// Clean Separation: Layout Engine -> Matrix Builder -> Style Engine -> ESC/POS Generator -> Transport Layer
 
-export interface ReceiptData {
-  title?: string;
-  type?: string;
-  data?: any;
-}
-
-export interface PrinterDevice {
-  id: string;
-  name: string;
-  sector: 'caixa' | 'cozinha' | 'bar' | 'expedição' | 'outros' | string;
-  method: 'system' | 'webusb' | 'webserial' | 'bluetooth' | 'network' | 'virtual';
-  connectionIp?: string;
+export interface PhysicalPrinterProfile {
   paperSize: '58mm' | '80mm';
-  enabled: boolean;
+  printableWidthMm: number; // e.g., 48mm for 58mm roll, 72mm for 80mm roll
+  fontFamily: 'font_a' | 'font_b' | 'font_c';
+  fontWidthDots: number; // Font A = 12 dots, Font B = 9 dots
+  fontHeightDots: number; // 24 dots
+  columnsCount: number; // total columns (e.g., 32, 42, 48, 64)
+  leftMarginCols: number;
+  rightMarginCols: number;
+  usableColumns: number; // columnsCount - leftMarginCols - rightMarginCols
+  lineSpacingDots: number; // e.g. 30 dots
+  density: 'low' | 'medium' | 'high' | 'ultra';
   autoCut: boolean;
-  copies: number;
+  cashDrawer: boolean;
 }
+
+export interface TextStyle {
+  bold?: boolean;
+  underline?: boolean;
+  invert?: boolean;
+  doubleWidth?: boolean;
+  doubleHeight?: boolean;
+  align?: 'left' | 'center' | 'right';
+  font?: 'font_a' | 'font_b' | 'font_c';
+}
+
+export type MatrixLine =
+  | { type: 'text'; text: string; align?: 'left' | 'center' | 'right'; style?: TextStyle }
+  | { type: 'flex_row'; leftText: string; rightText: string; style?: TextStyle; isBold?: boolean }
+  | { type: 'divider'; char?: string; double?: boolean; style?: TextStyle }
+  | { type: 'blank'; count?: number }
+  | { type: 'barcode'; code: string; style?: TextStyle }
+  | { type: 'qrcode'; text: string; style?: TextStyle }
+  | { type: 'drawer' }
+  | { type: 'cut' };
 
 export interface SpoolJob {
   id: string;
@@ -28,380 +46,164 @@ export interface SpoolJob {
   status: 'completed' | 'error' | 'pending';
   durationMs: number;
   errorCode?: string;
-  details: string;
+  details?: string;
   rawHexPreview?: string;
 }
 
-export const DEFAULT_PRINTERS: PrinterDevice[] = [
-  {
-    id: 'prn_caixa',
-    name: 'Impressora do Caixa (HPRT-II / USB)',
-    sector: 'caixa',
-    method: 'system',
-    paperSize: '58mm',
-    enabled: true,
-    autoCut: true,
-    copies: 1,
-    connectionIp: ''
-  },
-  {
-    id: 'prn_cozinha',
-    name: 'Impressora da Cozinha',
-    sector: 'cozinha',
-    method: 'network',
-    paperSize: '80mm',
-    enabled: true,
-    autoCut: true,
-    copies: 1,
-    connectionIp: '192.168.1.201:9100'
-  }
-];
-
-export function getSavedPrinters(): PrinterDevice[] {
-  try {
-    const raw = localStorage.getItem('adegaos_printers_list');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    console.warn('[FluxOS Printer] Failed to parse printers list:', e);
-  }
-  return DEFAULT_PRINTERS;
-}
-
-export function savePrinters(printers: PrinterDevice[]): void {
-  localStorage.setItem('adegaos_printers_list', JSON.stringify(printers));
-}
-
-// REAL SPOOL QUEUE MANAGER
-export function getSpoolQueue(): SpoolJob[] {
-  try {
-    const raw = localStorage.getItem('adegaos_spool_queue_v2');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (e) {
-    console.warn('[Spooler Queue] Failed to read queue:', e);
-  }
-  return [];
-}
-
-export function addSpoolJob(job: SpoolJob): void {
-  const current = getSpoolQueue();
-  const updated = [job, ...current].slice(0, 50); // keep last 50 jobs
-  localStorage.setItem('adegaos_spool_queue_v2', JSON.stringify(updated));
-  window.dispatchEvent(new CustomEvent('adegaos_spool_updated', { detail: updated }));
-}
-
-export function clearSpoolQueue(): void {
-  localStorage.removeItem('adegaos_spool_queue_v2');
-  window.dispatchEvent(new CustomEvent('adegaos_spool_updated', { detail: [] }));
-}
-
-// ESC/POS Command Byte Map
-export const ESC_POS_COMMANDS = {
-  INIT: new Uint8Array([0x1B, 0x40]),
-  ALIGN_LEFT: new Uint8Array([0x1B, 0x61, 0x00]),
-  ALIGN_CENTER: new Uint8Array([0x1B, 0x61, 0x01]),
-  ALIGN_RIGHT: new Uint8Array([0x1B, 0x61, 0x02]),
-  FONT_A: new Uint8Array([0x1B, 0x4D, 0x00]),
-  FONT_B: new Uint8Array([0x1B, 0x4D, 0x01]),
-  FONT_C: new Uint8Array([0x1B, 0x4D, 0x02]),
-  BOLD_ON: new Uint8Array([0x1B, 0x45, 0x01]),
-  BOLD_OFF: new Uint8Array([0x1B, 0x45, 0x00]),
-  UNDERLINE_ON: new Uint8Array([0x1B, 0x2D, 0x01]),
-  UNDERLINE_OFF: new Uint8Array([0x1B, 0x2D, 0x00]),
-  INVERT_ON: new Uint8Array([0x1D, 0x42, 0x01]),
-  INVERT_OFF: new Uint8Array([0x1D, 0x42, 0x00]),
-  FEED_3_LINES: new Uint8Array([0x1B, 0x64, 0x03]),
-  PAPER_CUT_PARTIAL: new Uint8Array([0x1D, 0x56, 0x01]),
-  PAPER_CUT_FULL: new Uint8Array([0x1D, 0x56, 0x00]),
-  CASH_DRAWER_KICK: new Uint8Array([0x1B, 0x70, 0x00, 0x19, 0xFA])
-};
-
-// Generates scale command byte array (0x1D 0x21 N)
-export function getFontScaleCommand(widthScale: number = 1, heightScale: number = 1): Uint8Array {
-  const w = Math.min(Math.max(widthScale, 1), 8) - 1;
-  const h = Math.min(Math.max(heightScale, 1), 8) - 1;
-  const n = (w << 4) | h;
-  return new Uint8Array([0x1D, 0x21, n]);
-}
-
-// Convert receipt text and parameters into real ESC/POS Uint8Array
-export function generateEscPosBuffer(receiptText: string, options?: {
+export interface PrinterDevice {
+  id: string;
+  name: string;
+  sector: string;
+  method: 'webusb' | 'webserial' | 'network' | 'system' | 'virtual';
+  connectionIp?: string;
+  paperSize: '58mm' | '80mm';
+  enabled: boolean;
   autoCut?: boolean;
-  cashDrawer?: boolean;
-  align?: 'left' | 'center' | 'right';
-  fontFamily?: 'font_a' | 'font_b' | 'font_c';
-  bold?: boolean;
-  scaleHorizontal?: number;
-  scaleVertical?: number;
-}): Uint8Array {
-  const encoder = new TextEncoder();
-  const textBytes = encoder.encode(receiptText);
+  copies?: number;
+}
 
-  const parts: Uint8Array[] = [];
+// -----------------------------------------------------------------------------
+// 1. HARDWARE & PROFILE ENGINE
+// -----------------------------------------------------------------------------
 
-  // Init
-  parts.push(ESC_POS_COMMANDS.INIT);
-
-  // Font
-  if (options?.fontFamily === 'font_b') parts.push(ESC_POS_COMMANDS.FONT_B);
-  else if (options?.fontFamily === 'font_c') parts.push(ESC_POS_COMMANDS.FONT_C);
-  else parts.push(ESC_POS_COMMANDS.FONT_A);
-
-  // Align
-  if (options?.align === 'center') parts.push(ESC_POS_COMMANDS.ALIGN_CENTER);
-  else if (options?.align === 'right') parts.push(ESC_POS_COMMANDS.ALIGN_RIGHT);
-  else parts.push(ESC_POS_COMMANDS.ALIGN_LEFT);
-
-  // Scale
-  if ((options?.scaleHorizontal && options.scaleHorizontal > 1) || (options?.scaleVertical && options.scaleVertical > 1)) {
-    parts.push(getFontScaleCommand(options.scaleHorizontal || 1, options.scaleVertical || 1));
+export function getPhysicalPrinterProfile(
+  paperSizeOverride?: string,
+  hardwareConfig?: any,
+  layoutConfig?: any
+): PhysicalPrinterProfile {
+  const paperSize = (paperSizeOverride || hardwareConfig?.paperSize || localStorage.getItem('adegaos_paper_size') || '58mm') as '58mm' | '80mm';
+  const fontFamily = (layoutConfig?.fontFamily || hardwareConfig?.fontFamily || 'font_a') as 'font_a' | 'font_b' | 'font_c';
+  
+  let defaultCols = 32;
+  let printableWidthMm = 48;
+  
+  if (paperSize === '80mm') {
+    printableWidthMm = 72;
+    defaultCols = fontFamily === 'font_b' ? 64 : 48;
+  } else {
+    printableWidthMm = 48;
+    defaultCols = fontFamily === 'font_b' ? 42 : 32;
   }
 
-  // Bold
-  if (options?.bold) parts.push(ESC_POS_COMMANDS.BOLD_ON);
+  const columnsCount = hardwareConfig?.columnsCount && Number(hardwareConfig.columnsCount) > 0
+    ? Number(hardwareConfig.columnsCount)
+    : defaultCols;
 
-  // Drawer
-  if (options?.cashDrawer) parts.push(ESC_POS_COMMANDS.CASH_DRAWER_KICK);
+  const leftMarginCols = hardwareConfig?.leftMarginCols ? Math.max(0, Number(hardwareConfig.leftMarginCols)) : 0;
+  const rightMarginCols = hardwareConfig?.rightMarginCols ? Math.max(0, Number(hardwareConfig.rightMarginCols)) : 0;
+  const usableColumns = Math.max(16, columnsCount - leftMarginCols - rightMarginCols);
 
-  // Content
-  parts.push(textBytes);
+  return {
+    paperSize,
+    printableWidthMm,
+    fontFamily,
+    fontWidthDots: fontFamily === 'font_b' ? 9 : 12,
+    fontHeightDots: 24,
+    columnsCount,
+    leftMarginCols,
+    rightMarginCols,
+    usableColumns,
+    lineSpacingDots: layoutConfig?.lineSpacing || 30,
+    density: layoutConfig?.density || 'high',
+    autoCut: hardwareConfig?.autoCut !== false,
+    cashDrawer: hardwareConfig?.cashDrawer === true
+  };
+}
 
-  // Feed & Cut
-  parts.push(ESC_POS_COMMANDS.FEED_3_LINES);
+// -----------------------------------------------------------------------------
+// 2. TEXT WRAPPING & FORMATTING UTILITIES (ZERO CLIPPING GUARANTEE)
+// -----------------------------------------------------------------------------
 
-  if (options?.autoCut !== false) {
-    parts.push(ESC_POS_COMMANDS.PAPER_CUT_PARTIAL);
+export function wrapText(text: string, maxCols: number): string[] {
+  if (!text) return [''];
+  const clean = text.replace(/\r/g, '').trim();
+  if (clean.length <= maxCols) return [clean];
+
+  const words = clean.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    if (word.length > maxCols) {
+      // Word itself is longer than line capacity
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = '';
+      }
+      let rem = word;
+      while (rem.length > maxCols) {
+        lines.push(rem.slice(0, maxCols));
+        rem = rem.slice(maxCols);
+      }
+      currentLine = rem;
+    } else if (currentLine.length + (currentLine ? 1 : 0) + word.length <= maxCols) {
+      currentLine += (currentLine ? ' ' : '') + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
   }
 
-  const totalLen = parts.reduce((acc, curr) => acc + curr.length, 0);
-  const result = new Uint8Array(totalLen);
-  let offset = 0;
-  for (const part of parts) {
-    result.set(part, offset);
-    offset += part.length;
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+export function formatFlexRow(leftText: string, rightText: string, usableColumns: number): string[] {
+  const left = (leftText || '').trim();
+  const right = (rightText || '').trim();
+  
+  if (!left && !right) return [''];
+  if (!right) return wrapText(left, usableColumns);
+  if (!left) return [right.padStart(usableColumns, ' ')];
+
+  const rightLen = right.length;
+  if (rightLen >= usableColumns) {
+    const wrappedLeft = wrapText(left, usableColumns);
+    return [...wrappedLeft, right.padStart(usableColumns, ' ')];
   }
+
+  const availLeft = usableColumns - rightLen - 1;
+  const wrappedLeft = wrapText(left, Math.max(1, availLeft));
+
+  if (wrappedLeft.length === 0) {
+    return [right.padStart(usableColumns, ' ')];
+  }
+
+  const result: string[] = [];
+  for (let i = 0; i < wrappedLeft.length - 1; i++) {
+    result.push(wrappedLeft[i]);
+  }
+
+  const lastLeft = wrappedLeft[wrappedLeft.length - 1];
+  const spaceCount = usableColumns - lastLeft.length - rightLen;
+  result.push(lastLeft + ' '.repeat(Math.max(1, spaceCount)) + right);
 
   return result;
 }
 
-// Convert binary buffer to Hex String preview for debugging
-export function bufferToHexPreview(buffer: Uint8Array, maxBytes: number = 32): string {
-  const slice = buffer.slice(0, maxBytes);
-  const hex = Array.from(slice).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-  return buffer.length > maxBytes ? `${hex} ... (+${buffer.length - maxBytes} bytes)` : hex;
+export function alignText(text: string, usableColumns: number, align: 'left' | 'center' | 'right' = 'left'): string {
+  const str = (text || '').trim();
+  if (str.length >= usableColumns) return str.slice(0, usableColumns);
+  if (align === 'center') {
+    const pad = Math.floor((usableColumns - str.length) / 2);
+    return ' '.repeat(pad) + str;
+  }
+  if (align === 'right') {
+    return str.padStart(usableColumns, ' ');
+  }
+  return str;
 }
 
-// Formats text into receipt layout based on paper width (30 chars for 58mm, 44 chars for 80mm)
-export function generateReceiptText(typeOrPayload: any, maybeData?: any, overridePaperSize?: string, customDocSettings?: any): string {
-  let type = '';
-  let title = 'CUPOM NÃO FISCAL';
-  let data: any = null;
+// -----------------------------------------------------------------------------
+// 3. DOCUMENT MATRIX BUILDER (LAYOUT ENGINE)
+// -----------------------------------------------------------------------------
 
-  if (typeof typeOrPayload === 'string') {
-    type = typeOrPayload;
-    data = maybeData || {};
-    if (type === 'cash_flow') title = 'FECHAMENTO DE CAIXA';
-    else if (type === 'comanda') title = 'COMPROVANTE DE PRODUÇÃO';
-    else if (type === 'sale') title = 'CUPOM NÃO FISCAL';
-  } else if (typeOrPayload && typeof typeOrPayload === 'object') {
-    type = typeOrPayload.type || 'sale';
-    title = typeOrPayload.title || 'CUPOM NÃO FISCAL';
-    data = typeOrPayload.data || {};
-  }
-
-  const paperSize = overridePaperSize || localStorage.getItem('adegaos_paper_size') || '58mm';
-  // 30 chars for 58mm (48mm printable area), 44 chars for 80mm (72mm printable area)
-  const width = paperSize === '80mm' ? 44 : 30;
-  const divider = '-'.repeat(width);
-  const doubleDivider = '='.repeat(width);
-
-  const doc = customDocSettings || {};
-  const isVis = (elKey: string) => doc[elKey]?.visible !== false;
-
-  const storeName = (localStorage.getItem('adegaos_store_name') || 'ADEGA CENTRAL').toUpperCase();
-  const cnpj = localStorage.getItem('adegaos_cnpj') || '';
-  const headerText = localStorage.getItem('adegaos_header_text') || 'OBRIGADO PELA PREFERÊNCIA!';
-  const footerText = localStorage.getItem('adegaos_footer_text') || 'FluxOS - Sistema de Gestão\n*** CUPOM NÃO FISCAL ***';
-  const customLogoText = localStorage.getItem('adegaos_receipt_logo_text') || '';
-  const customQrCodeText = localStorage.getItem('adegaos_receipt_qrcode_text') || localStorage.getItem('adegaos_pix_key') || '';
-
-  const center = (text: string) => {
-    if (text.length >= width) return text.slice(0, width);
-    const leftPad = Math.floor((width - text.length) / 2);
-    return ' '.repeat(leftPad) + text;
-  };
-
-  const justify = (left: string, right: string) => {
-    const totalLen = left.length + right.length;
-    if (totalLen >= width) {
-      const availLeft = width - right.length - 1;
-      return left.slice(0, Math.max(0, availLeft)) + ' ' + right;
-    }
-    const spaces = ' '.repeat(width - totalLen);
-    return left + spaces + right;
-  };
-
-  const lines: string[] = [];
-
-  // 1. Header
-  if (isVis('header')) {
-    lines.push(center(storeName));
-    if (cnpj) lines.push(center(`CNPJ: ${cnpj}`));
-    if (headerText) {
-      headerText.split('\n').forEach(h => {
-        if (h.trim()) lines.push(center(h.trim()));
-      });
-    }
-    lines.push(divider);
-  }
-
-  // 2. Logo (Only if enabled AND logo text/brand is provided)
-  if (isVis('logo') && customLogoText.trim()) {
-    lines.push(center(customLogoText.trim().toUpperCase()));
-    lines.push(divider);
-  }
-
-  lines.push(center(title.toUpperCase()));
-  lines.push(divider);
-
-  // Body based on payload type
-  if (type === 'cash_flow' || data.cash_flow) {
-    const cf = data.cash_flow || data;
-    if (isVis('dateTime')) {
-      lines.push(justify('Data:', cf.date || new Date().toLocaleDateString('pt-BR')));
-      lines.push(justify('Hora:', cf.time || new Date().toLocaleTimeString('pt-BR')));
-    }
-    lines.push(justify('Operador:', cf.cashierId || 'GERENTE'));
-    lines.push(divider);
-    lines.push(justify('Saldo Inicial:', `R$ ${(cf.initialBalance || 0).toFixed(2)}`));
-    lines.push(justify('Entradas Dinheiro:', `R$ ${(cf.cashIn || 0).toFixed(2)}`));
-    lines.push(justify('Vendas Cartão:', `R$ ${(cf.cardTotal || 0).toFixed(2)}`));
-    lines.push(justify('Vendas PIX:', `R$ ${(cf.pixTotal || 0).toFixed(2)}`));
-    lines.push(justify('Sangrias/Retiradas:', `R$ ${(cf.withdrawals || 0).toFixed(2)}`));
-    lines.push(doubleDivider);
-    lines.push(justify('TOTAL EM CAIXA:', `R$ ${(cf.totalInCash || 0).toFixed(2)}`));
-  } else if (type === 'comanda' || data.items) {
-    if (isVis('dateTime')) {
-      lines.push(justify('Data/Hora:', `${data.date || new Date().toLocaleDateString('pt-BR')} ${data.time || ''}`));
-    }
-    if (isVis('orderNumber')) {
-      lines.push(justify('Comanda/Mesa:', data.identifier || data.table || 'BALCÃO'));
-    }
-    if (data.sector) lines.push(justify('Setor:', data.sector.toUpperCase()));
-    lines.push(divider);
-    
-    if (isVis('itemsTable')) {
-      lines.push(justify('QTD ITEM', 'OBS'));
-      lines.push(divider);
-      (data.items || []).forEach((it: any) => {
-        const qtyStr = `${it.qty || it.quantity || 1}x`;
-        const nameStr = (it.name || it.productName || 'Item').trim();
-        lines.push(`${qtyStr} ${nameStr}`);
-        if (it.notes) {
-          lines.push(`   OBS: ${it.notes}`);
-        }
-      });
-    }
-  } else {
-    // Venda / Sale
-    const sale = data.sale || data;
-    const tx = data.transaction || {};
-    const dateStr = sale.timestamp ? new Date(sale.timestamp).toLocaleString('pt-BR') : `${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`;
-    
-    if (isVis('orderNumber')) {
-      const ticketNum = sale.id || sale.number || '0000';
-      lines.push(justify('Cupom Nº:', `#${ticketNum.toString().slice(-8).toUpperCase()}`));
-    }
-    if (isVis('dateTime')) {
-      lines.push(justify('Data:', dateStr));
-    }
-    if (isVis('customerName')) {
-      lines.push(justify('Cliente:', (sale.clientName || 'CONSUMIDOR').toUpperCase()));
-    }
-    
-    if (isVis('itemsTable')) {
-      lines.push(divider);
-      lines.push(justify('PRODUTO / QTD x UN', 'VALOR'));
-      lines.push(divider);
-
-      const items = sale.items || [];
-      items.forEach((item: any) => {
-        const qty = item.quantity || item.qty || 1;
-        const unitPrice = item.unitPrice || item.product?.sellPrice || 0;
-        const total = item.totalPrice || (unitPrice * qty) || 0;
-        const pName = (item.product?.name || item.productName || item.name || 'Produto').trim();
-        
-        const qtyStr = `${qty}x`;
-        const totalStr = `R$ ${total.toFixed(2)}`;
-        const unitStr = `R$ ${unitPrice.toFixed(2)}`;
-
-        // POS Receipt Format:
-        lines.push(pName);
-        const detailLeft = `  ${qtyStr} x ${unitStr}`;
-        lines.push(justify(detailLeft, totalStr));
-      });
-    }
-
-    if (isVis('totals')) {
-      lines.push(divider);
-      lines.push(justify('Subtotal:', `R$ ${(sale.subtotal || sale.totalAmount || 0).toFixed(2)}`));
-      if (sale.discountAmount && sale.discountAmount > 0) {
-        lines.push(justify('Desconto:', `- R$ ${sale.discountAmount.toFixed(2)}`));
-      }
-      lines.push(doubleDivider);
-      lines.push(justify('TOTAL PAGO:', `R$ ${(sale.totalAmount || sale.total || 0).toFixed(2)}`));
-    }
-
-    if (isVis('payments')) {
-      lines.push(justify('Forma Pagto:', (sale.paymentMethod || tx.method || 'DINHEIRO').toUpperCase()));
-      if (sale.changeAmount && sale.changeAmount > 0) {
-        lines.push(justify('Troco:', `R$ ${sale.changeAmount.toFixed(2)}`));
-      }
-    }
-  }
-
-  // QR Code (Only if visible AND QR Code text / Pix key is set)
-  if (isVis('qrCode') && customQrCodeText.trim()) {
-    lines.push(divider);
-    lines.push(center('CHAVE PIX / CONSULTA:'));
-    lines.push(center(customQrCodeText.trim()));
-  }
-
-  // Barcode (Only if visible AND sale ID exists)
-  if (isVis('barcode')) {
-    const saleId = data.sale?.id || data.id || '';
-    if (saleId) {
-      lines.push(divider);
-      lines.push(center(`* ${saleId.toString().slice(-12).toUpperCase()} *`));
-    }
-  }
-
-  // Footer (Only if visible)
-  if (isVis('footer') && footerText.trim()) {
-    lines.push(divider);
-    footerText.split('\n').forEach(f => {
-      if (f.trim()) lines.push(center(f.trim()));
-    });
-  }
-
-  lines.push('\n\n\n');
-
-  return lines.join('\n');
-}
-
-// Generate styled HTML document with flexbox layout, bolding, and zero clipping for System Thermal Printing
-export function generateReceiptHtml(
+export function buildDocumentMatrix(
   typeOrPayload: any,
   maybeData?: any,
-  overridePaperSize?: string,
-  customDocSettings?: any,
-  customLayoutSettings?: any
-): string {
+  profileOverride?: PhysicalPrinterProfile,
+  customDocSettings?: any
+): MatrixLine[] {
   let type = '';
   let title = 'CUPOM NÃO FISCAL';
   let data: any = null;
@@ -412,17 +214,16 @@ export function generateReceiptHtml(
     if (type === 'cash_flow') title = 'FECHAMENTO DE CAIXA';
     else if (type === 'comanda') title = 'COMPROVANTE DE PRODUÇÃO';
     else if (type === 'sale') title = 'CUPOM NÃO FISCAL';
+    else if (type === 'diagnostic') title = 'DIAGNÓSTICO IMPRESSORA';
   } else if (typeOrPayload && typeof typeOrPayload === 'object') {
     type = typeOrPayload.type || 'sale';
     title = typeOrPayload.title || 'CUPOM NÃO FISCAL';
     data = typeOrPayload.data || {};
   }
 
-  const paperSize = overridePaperSize || localStorage.getItem('adegaos_paper_size') || '58mm';
-  const widthCss = paperSize === '80mm' ? '72mm' : '48mm';
+  const profile = profileOverride || getPhysicalPrinterProfile();
   const doc = customDocSettings || {};
-  const layout = customLayoutSettings || {};
-  const isVis = (elKey: string) => doc[elKey]?.visible !== false;
+  const isVis = (key: string) => doc[key]?.visible !== false;
 
   const storeName = (localStorage.getItem('adegaos_store_name') || 'ADEGA CENTRAL').toUpperCase();
   const cnpj = localStorage.getItem('adegaos_cnpj') || '';
@@ -431,94 +232,78 @@ export function generateReceiptHtml(
   const customLogoText = localStorage.getItem('adegaos_receipt_logo_text') || '';
   const customQrCodeText = localStorage.getItem('adegaos_receipt_qrcode_text') || localStorage.getItem('adegaos_pix_key') || '';
 
-  const globalBold = layout.bold === true;
-  const globalWeight = globalBold ? '900' : '700';
+  const matrix: MatrixLine[] = [];
 
-  let htmlBody = '';
-
-  const renderDivider = (type: 'single' | 'double' = 'single') => {
-    const style = type === 'double' ? 'border-top: 2px solid #000; margin: 4px 0;' : 'border-top: 1px dashed #000; margin: 3px 0;';
-    return `<div style="${style}"></div>`;
-  };
-
-  const renderFlexRow = (left: string, right: string, isBold: boolean = false, fontSize: string = '1em') => {
-    const weight = isBold || globalBold ? '900' : '600';
-    return `
-      <div style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; font-weight: ${weight}; font-size: ${fontSize}; margin: 1px 0;">
-        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px;">${escapeHtml(left)}</span>
-        <span style="white-space: nowrap; font-variant-numeric: tabular-nums;">${escapeHtml(right)}</span>
-      </div>
-    `;
-  };
-
-  // 1. Header
+  // Header
   if (isVis('header')) {
-    const headerBold = doc.header?.bold !== false || globalBold;
-    const headerWeight = headerBold ? '900' : '600';
-    const headerSize = doc.header?.size === 'double' ? '1.25em' : '1.05em';
-
-    htmlBody += `<div style="text-align: center; font-weight: ${headerWeight}; font-size: ${headerSize}; line-height: 1.2;">${escapeHtml(storeName)}</div>`;
-    if (cnpj) {
-      htmlBody += `<div style="text-align: center; font-size: 0.9em;">CNPJ: ${escapeHtml(cnpj)}</div>`;
-    }
+    const hStyle = doc.header || {};
+    matrix.push({ type: 'text', text: storeName, align: hStyle.align || 'center', style: { bold: hStyle.bold !== false, doubleHeight: hStyle.size === 'double' || hStyle.size === 'large' } });
+    if (cnpj) matrix.push({ type: 'text', text: `CNPJ: ${cnpj}`, align: 'center' });
     if (headerText) {
-      headerText.split('\n').forEach(h => {
-        if (h.trim()) {
-          htmlBody += `<div style="text-align: center; font-size: 0.9em;">${escapeHtml(h.trim())}</div>`;
-        }
+      headerText.split('\n').forEach((h: string) => {
+        if (h.trim()) matrix.push({ type: 'text', text: h.trim(), align: 'center' });
       });
     }
-    htmlBody += renderDivider('single');
+    matrix.push({ type: 'divider' });
   }
 
-  // 2. Logo
+  // Logo
   if (isVis('logo') && customLogoText.trim()) {
-    htmlBody += `<div style="text-align: center; font-weight: 900; font-size: 1.1em;">${escapeHtml(customLogoText.trim().toUpperCase())}</div>`;
-    htmlBody += renderDivider('single');
+    matrix.push({ type: 'text', text: customLogoText.trim().toUpperCase(), align: doc.logo?.align || 'center', style: { bold: true } });
+    matrix.push({ type: 'divider' });
   }
 
-  // 3. Document Title
-  htmlBody += `<div style="text-align: center; font-weight: 900; font-size: 1.2em; text-transform: uppercase; letter-spacing: 0.5px; margin: 2px 0;">${escapeHtml(title)}</div>`;
-  htmlBody += renderDivider('single');
+  // Title
+  matrix.push({ type: 'text', text: title.toUpperCase(), align: 'center', style: { bold: true } });
+  matrix.push({ type: 'divider' });
 
-  // Body Content
-  if (type === 'cash_flow' || data.cash_flow) {
+  // Body Content per Document Type
+  if (type === 'diagnostic') {
+    matrix.push({ type: 'flex_row', leftText: 'Modelo:', rightText: data.model || profile.paperSize, isBold: true });
+    matrix.push({ type: 'flex_row', leftText: 'Papel:', rightText: `${profile.paperSize} (${profile.printableWidthMm}mm)` });
+    matrix.push({ type: 'flex_row', leftText: 'Colunas Úteis:', rightText: `${profile.usableColumns} cols` });
+    matrix.push({ type: 'flex_row', leftText: 'Fonte Padrão:', rightText: profile.fontFamily.toUpperCase() });
+    matrix.push({ type: 'flex_row', leftText: 'Status Teste:', rightText: 'OK / SUCESSO', isBold: true });
+    matrix.push({ type: 'divider' });
+    matrix.push({ type: 'text', text: 'TESTE DE CARACTERES & BOLD', align: 'center', style: { bold: true } });
+    matrix.push({ type: 'text', text: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', align: 'left' });
+    matrix.push({ type: 'text', text: 'abcdefghijklmnopqrstuvwxyz!@#$%&*()', align: 'left' });
+    matrix.push({ type: 'divider', double: true });
+  } else if (type === 'cash_flow' || data.cash_flow) {
     const cf = data.cash_flow || data;
     if (isVis('dateTime')) {
-      htmlBody += renderFlexRow('Data:', cf.date || new Date().toLocaleDateString('pt-BR'));
-      htmlBody += renderFlexRow('Hora:', cf.time || new Date().toLocaleTimeString('pt-BR'));
+      matrix.push({ type: 'flex_row', leftText: 'Data:', rightText: cf.date || new Date().toLocaleDateString('pt-BR') });
+      matrix.push({ type: 'flex_row', leftText: 'Hora:', rightText: cf.time || new Date().toLocaleTimeString('pt-BR') });
     }
-    htmlBody += renderFlexRow('Operador:', cf.cashierId || 'GERENTE');
-    htmlBody += renderDivider('single');
-    htmlBody += renderFlexRow('Saldo Inicial:', `R$ ${(cf.initialBalance || 0).toFixed(2)}`);
-    htmlBody += renderFlexRow('Entradas Dinheiro:', `R$ ${(cf.cashIn || 0).toFixed(2)}`);
-    htmlBody += renderFlexRow('Vendas Cartão:', `R$ ${(cf.cardTotal || 0).toFixed(2)}`);
-    htmlBody += renderFlexRow('Vendas PIX:', `R$ ${(cf.pixTotal || 0).toFixed(2)}`);
-    htmlBody += renderFlexRow('Sangrias/Retiradas:', `R$ ${(cf.withdrawals || 0).toFixed(2)}`);
-    htmlBody += renderDivider('double');
-    htmlBody += renderFlexRow('TOTAL EM CAIXA:', `R$ ${(cf.totalInCash || 0).toFixed(2)}`, true, '1.2em');
+    matrix.push({ type: 'flex_row', leftText: 'Operador:', rightText: cf.cashierId || 'GERENTE' });
+    matrix.push({ type: 'divider' });
+    matrix.push({ type: 'flex_row', leftText: 'Saldo Inicial:', rightText: `R$ ${(cf.initialBalance || 0).toFixed(2)}` });
+    matrix.push({ type: 'flex_row', leftText: 'Entradas Dinheiro:', rightText: `R$ ${(cf.cashIn || 0).toFixed(2)}` });
+    matrix.push({ type: 'flex_row', leftText: 'Vendas Cartão:', rightText: `R$ ${(cf.cardTotal || 0).toFixed(2)}` });
+    matrix.push({ type: 'flex_row', leftText: 'Vendas PIX:', rightText: `R$ ${(cf.pixTotal || 0).toFixed(2)}` });
+    matrix.push({ type: 'flex_row', leftText: 'Sangrias/Retiradas:', rightText: `R$ ${(cf.withdrawals || 0).toFixed(2)}` });
+    matrix.push({ type: 'divider', double: true });
+    matrix.push({ type: 'flex_row', leftText: 'TOTAL EM CAIXA:', rightText: `R$ ${(cf.totalInCash || 0).toFixed(2)}`, isBold: true });
   } else if (type === 'comanda' || data.items) {
-    const orderBold = doc.orderNumber?.bold !== false || globalBold;
     if (isVis('dateTime')) {
-      htmlBody += renderFlexRow('Data/Hora:', `${data.date || new Date().toLocaleDateString('pt-BR')} ${data.time || ''}`);
+      matrix.push({ type: 'flex_row', leftText: 'Data/Hora:', rightText: `${data.date || new Date().toLocaleDateString('pt-BR')} ${data.time || ''}` });
     }
     if (isVis('orderNumber')) {
-      htmlBody += renderFlexRow('Comanda/Mesa:', data.identifier || data.table || 'BALCÃO', orderBold, '1.2em');
+      const orderStyle = doc.orderNumber || {};
+      matrix.push({ type: 'flex_row', leftText: 'Comanda/Mesa:', rightText: String(data.identifier || data.table || 'BALCÃO'), isBold: orderStyle.bold !== false });
     }
-    if (data.sector) {
-      htmlBody += renderFlexRow('Setor:', data.sector.toUpperCase(), true);
-    }
-    htmlBody += renderDivider('single');
+    if (data.sector) matrix.push({ type: 'flex_row', leftText: 'Setor:', rightText: data.sector.toUpperCase(), isBold: true });
+    matrix.push({ type: 'divider' });
 
     if (isVis('itemsTable')) {
-      htmlBody += renderFlexRow('QTD ITEM', 'OBS', true);
-      htmlBody += renderDivider('single');
+      matrix.push({ type: 'flex_row', leftText: 'QTD ITEM', rightText: 'OBS', isBold: true });
+      matrix.push({ type: 'divider' });
       (data.items || []).forEach((it: any) => {
         const qtyStr = `${it.qty || it.quantity || 1}x`;
         const nameStr = (it.name || it.productName || 'Item').trim();
-        htmlBody += `<div style="font-weight: 900; font-size: 1.1em; margin-top: 3px;">${escapeHtml(qtyStr)} ${escapeHtml(nameStr)}</div>`;
+        matrix.push({ type: 'flex_row', leftText: `${qtyStr} ${nameStr}`, rightText: '', isBold: true });
         if (it.notes) {
-          htmlBody += `<div style="font-size: 0.9em; padding-left: 10px; font-style: italic;">OBS: ${escapeHtml(it.notes)}</div>`;
+          matrix.push({ type: 'text', text: `   OBS: ${it.notes}`, style: { bold: false } });
         }
       });
     }
@@ -527,28 +312,24 @@ export function generateReceiptHtml(
     const sale = data.sale || data;
     const tx = data.transaction || {};
     const dateStr = sale.timestamp ? new Date(sale.timestamp).toLocaleString('pt-BR') : `${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`;
-    const orderBold = doc.orderNumber?.bold !== false || globalBold;
 
     if (isVis('orderNumber')) {
       const ticketNum = sale.id || sale.number || '0000';
-      htmlBody += renderFlexRow('Cupom Nº:', `#${ticketNum.toString().slice(-8).toUpperCase()}`, orderBold, '1.1em');
+      matrix.push({ type: 'flex_row', leftText: 'Cupom Nº:', rightText: `#${ticketNum.toString().slice(-8).toUpperCase()}`, isBold: doc.orderNumber?.bold !== false });
     }
     if (isVis('dateTime')) {
-      htmlBody += renderFlexRow('Data:', dateStr);
+      matrix.push({ type: 'flex_row', leftText: 'Data:', rightText: dateStr });
     }
     if (isVis('customerName')) {
-      htmlBody += renderFlexRow('Cliente:', (sale.clientName || 'CONSUMIDOR').toUpperCase());
+      matrix.push({ type: 'flex_row', leftText: 'Cliente:', rightText: (sale.clientName || 'CONSUMIDOR').toUpperCase() });
     }
 
     if (isVis('itemsTable')) {
-      htmlBody += renderDivider('single');
-      htmlBody += renderFlexRow('PRODUTO / QTD x UN', 'VALOR', true);
-      htmlBody += renderDivider('single');
+      matrix.push({ type: 'divider' });
+      matrix.push({ type: 'flex_row', leftText: 'PRODUTO / QTD x UN', rightText: 'VALOR', isBold: true });
+      matrix.push({ type: 'divider' });
 
       const items = sale.items || [];
-      const itemsBold = doc.itemsTable?.bold || globalBold;
-      const itemsWeight = itemsBold ? '900' : '600';
-
       items.forEach((item: any) => {
         const qty = item.quantity || item.qty || 1;
         const unitPrice = item.unitPrice || item.product?.sellPrice || 0;
@@ -559,57 +340,294 @@ export function generateReceiptHtml(
         const totalStr = `R$ ${total.toFixed(2)}`;
         const unitStr = `R$ ${unitPrice.toFixed(2)}`;
 
-        htmlBody += `<div style="font-weight: ${itemsWeight}; margin-top: 2px; word-break: break-word;">${escapeHtml(pName)}</div>`;
-        htmlBody += renderFlexRow(`  ${qtyStr} x ${unitStr}`, totalStr, itemsBold);
+        matrix.push({ type: 'text', text: pName, style: { bold: true } });
+        matrix.push({ type: 'flex_row', leftText: `  ${qtyStr} x ${unitStr}`, rightText: totalStr });
       });
     }
 
     if (isVis('totals')) {
-      const totalsBold = doc.totals?.bold !== false || globalBold;
-      htmlBody += renderDivider('single');
-      htmlBody += renderFlexRow('Subtotal:', `R$ ${(sale.subtotal || sale.totalAmount || 0).toFixed(2)}`);
+      matrix.push({ type: 'divider' });
+      matrix.push({ type: 'flex_row', leftText: 'Subtotal:', rightText: `R$ ${(sale.subtotal || sale.totalAmount || 0).toFixed(2)}` });
       if (sale.discountAmount && sale.discountAmount > 0) {
-        htmlBody += renderFlexRow('Desconto:', `- R$ ${sale.discountAmount.toFixed(2)}`);
+        matrix.push({ type: 'flex_row', leftText: 'Desconto:', rightText: `- R$ ${sale.discountAmount.toFixed(2)}` });
       }
-      htmlBody += renderDivider('double');
-      htmlBody += renderFlexRow('TOTAL PAGO:', `R$ ${(sale.totalAmount || sale.total || 0).toFixed(2)}`, totalsBold, '1.25em');
+      matrix.push({ type: 'divider', double: true });
+      matrix.push({ type: 'flex_row', leftText: 'TOTAL PAGO:', rightText: `R$ ${(sale.totalAmount || sale.total || 0).toFixed(2)}`, isBold: doc.totals?.bold !== false });
     }
 
     if (isVis('payments')) {
-      htmlBody += renderFlexRow('Forma Pagto:', (sale.paymentMethod || tx.method || 'DINHEIRO').toUpperCase(), true);
+      matrix.push({ type: 'flex_row', leftText: 'Forma Pagto:', rightText: (sale.paymentMethod || tx.method || 'DINHEIRO').toUpperCase() });
       if (sale.changeAmount && sale.changeAmount > 0) {
-        htmlBody += renderFlexRow('Troco:', `R$ ${sale.changeAmount.toFixed(2)}`);
+        matrix.push({ type: 'flex_row', leftText: 'Troco:', rightText: `R$ ${sale.changeAmount.toFixed(2)}` });
       }
     }
   }
 
   // QR Code
   if (isVis('qrCode') && customQrCodeText.trim()) {
-    htmlBody += renderDivider('single');
-    htmlBody += `<div style="text-align: center; font-weight: 800; font-size: 0.9em;">CHAVE PIX / CONSULTA:</div>`;
-    htmlBody += `<div style="text-align: center; font-weight: 900; font-size: 0.95em; word-break: break-all; margin-top: 2px;">${escapeHtml(customQrCodeText.trim())}</div>`;
+    matrix.push({ type: 'divider' });
+    matrix.push({ type: 'text', text: 'CHAVE PIX / CONSULTA:', align: 'center' });
+    matrix.push({ type: 'qrcode', text: customQrCodeText.trim(), style: { align: 'center' } });
+    matrix.push({ type: 'text', text: customQrCodeText.trim(), align: 'center' });
   }
 
   // Barcode
   if (isVis('barcode')) {
     const saleId = data.sale?.id || data.id || '';
     if (saleId) {
-      htmlBody += renderDivider('single');
-      htmlBody += `<div style="text-align: center; font-family: monospace; font-weight: 900; letter-spacing: 2px;">* ${escapeHtml(saleId.toString().slice(-12).toUpperCase())} *</div>`;
+      matrix.push({ type: 'divider' });
+      matrix.push({ type: 'barcode', code: saleId.toString().slice(-12).toUpperCase(), style: { align: 'center' } });
+      matrix.push({ type: 'text', text: `* ${saleId.toString().slice(-12).toUpperCase()} *`, align: 'center' });
     }
   }
 
   // Footer
   if (isVis('footer') && footerText.trim()) {
-    htmlBody += renderDivider('single');
-    footerText.split('\n').forEach(f => {
-      if (f.trim()) {
-        htmlBody += `<div style="text-align: center; font-size: 0.85em; font-weight: 600;">${escapeHtml(f.trim())}</div>`;
-      }
+    matrix.push({ type: 'divider' });
+    footerText.split('\n').forEach((f: string) => {
+      if (f.trim()) matrix.push({ type: 'text', text: f.trim(), align: 'center' });
     });
   }
 
-  const fontSizeCss = paperSize === '80mm' ? '12px' : '10px';
+  if (profile.cashDrawer) matrix.push({ type: 'drawer' });
+  if (profile.autoCut) matrix.push({ type: 'cut' });
+  matrix.push({ type: 'blank', count: 3 });
+
+  return matrix;
+}
+
+// -----------------------------------------------------------------------------
+// 4. MATRIX PROCESSOR TO PLAIN MONOSPACE TEXT (PREVIEW / LOGS)
+// -----------------------------------------------------------------------------
+
+export function renderMatrixToText(matrix: MatrixLine[], profile: PhysicalPrinterProfile): string {
+  const cols = profile.usableColumns;
+  const marginPad = ' '.repeat(profile.leftMarginCols);
+  const lines: string[] = [];
+
+  for (const item of matrix) {
+    if (item.type === 'blank') {
+      for (let i = 0; i < (item.count || 1); i++) lines.push('');
+    } else if (item.type === 'divider') {
+      const char = item.char || (item.double ? '=' : '-');
+      lines.push(marginPad + char.repeat(cols));
+    } else if (item.type === 'text') {
+      const wrapped = wrapText(item.text, cols);
+      wrapped.forEach(w => {
+        lines.push(marginPad + alignText(w, cols, item.align || 'left'));
+      });
+    } else if (item.type === 'flex_row') {
+      const formatted = formatFlexRow(item.leftText, item.rightText, cols);
+      formatted.forEach(f => lines.push(marginPad + f));
+    } else if (item.type === 'qrcode') {
+      lines.push(marginPad + alignText(`[QRCODE: ${item.text}]`, cols, 'center'));
+    } else if (item.type === 'barcode') {
+      lines.push(marginPad + alignText(`[BARCODE: ${item.code}]`, cols, 'center'));
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// -----------------------------------------------------------------------------
+// 5. ESC/POS STYLE ENGINE & STATE MACHINE (STATEFUL COMMAND EMISSION)
+// -----------------------------------------------------------------------------
+
+export class EscPosStyleState {
+  align: 'left' | 'center' | 'right' = 'left';
+  font: 'font_a' | 'font_b' | 'font_c' = 'font_a';
+  bold: boolean = false;
+  underline: boolean = false;
+  invert: boolean = false;
+  doubleWidth: boolean = false;
+  doubleHeight: boolean = false;
+
+  getInitBytes(): Uint8Array {
+    this.align = 'left';
+    this.font = 'font_a';
+    this.bold = false;
+    this.underline = false;
+    this.invert = false;
+    this.doubleWidth = false;
+    this.doubleHeight = false;
+    return new Uint8Array([
+      0x1B, 0x40,             // ESC @ (Reset Printer)
+      0x1B, 0x33, 30,         // ESC 3 30 (Line spacing 30 dots)
+      0x1B, 0x61, 0x00,       // Align left
+      0x1B, 0x4D, 0x00,       // Font A
+      0x1B, 0x45, 0x00,       // Bold OFF
+      0x1B, 0x2D, 0x00,       // Underline OFF
+      0x1D, 0x42, 0x00,       // Invert OFF
+      0x1D, 0x21, 0x00        // Normal 1x1 size
+    ]);
+  }
+
+  transitionTo(targetStyle?: TextStyle): Uint8Array {
+    const bytes: number[] = [];
+
+    const targetAlign = targetStyle?.align || 'left';
+    if (this.align !== targetAlign) {
+      this.align = targetAlign;
+      const alignCode = targetAlign === 'center' ? 0x01 : targetAlign === 'right' ? 0x02 : 0x00;
+      bytes.push(0x1B, 0x61, alignCode);
+    }
+
+    const targetFont = targetStyle?.font || 'font_a';
+    if (this.font !== targetFont) {
+      this.font = targetFont;
+      const fontCode = targetFont === 'font_b' ? 0x01 : targetFont === 'font_c' ? 0x02 : 0x00;
+      bytes.push(0x1B, 0x4D, fontCode);
+    }
+
+    const targetBold = targetStyle?.bold === true;
+    if (this.bold !== targetBold) {
+      this.bold = targetBold;
+      bytes.push(0x1B, 0x45, targetBold ? 0x01 : 0x00);
+    }
+
+    const targetUnderline = targetStyle?.underline === true;
+    if (this.underline !== targetUnderline) {
+      this.underline = targetUnderline;
+      bytes.push(0x1B, 0x2D, targetUnderline ? 0x01 : 0x00);
+    }
+
+    const targetInvert = targetStyle?.invert === true;
+    if (this.invert !== targetInvert) {
+      this.invert = targetInvert;
+      bytes.push(0x1D, 0x42, targetInvert ? 0x01 : 0x00);
+    }
+
+    const targetDW = targetStyle?.doubleWidth === true;
+    const targetDH = targetStyle?.doubleHeight === true;
+    if (this.doubleWidth !== targetDW || this.doubleHeight !== targetDH) {
+      this.doubleWidth = targetDW;
+      this.doubleHeight = targetDH;
+      const w = targetDW ? 1 : 0;
+      const h = targetDH ? 1 : 0;
+      const n = (w << 4) | h;
+      bytes.push(0x1D, 0x21, n);
+    }
+
+    return new Uint8Array(bytes);
+  }
+}
+
+// Encoder for Text to Binary Uint8Array
+const textEncoder = new TextEncoder();
+
+export function renderMatrixToEscPosBuffer(
+  matrix: MatrixLine[],
+  profile: PhysicalPrinterProfile,
+  options?: any
+): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  const state = new EscPosStyleState();
+
+  // Initialize Printer
+  chunks.push(state.getInitBytes());
+
+  // Density Command
+  if (profile.density === 'ultra') chunks.push(new Uint8Array([0x1D, 0x28, 0x4B, 0x02, 0x00, 0x31, 0x02]));
+
+  const cols = profile.usableColumns;
+  const leftPad = ' '.repeat(profile.leftMarginCols);
+
+  for (const item of matrix) {
+    if (item.type === 'blank') {
+      for (let i = 0; i < (item.count || 1); i++) {
+        chunks.push(textEncoder.encode('\n'));
+      }
+    } else if (item.type === 'divider') {
+      chunks.push(state.transitionTo({ align: 'left', bold: false }));
+      const char = item.char || (item.double ? '=' : '-');
+      chunks.push(textEncoder.encode(leftPad + char.repeat(cols) + '\n'));
+    } else if (item.type === 'text') {
+      chunks.push(state.transitionTo({ align: item.align || 'left', ...item.style }));
+      const wrapped = wrapText(item.text, cols);
+      wrapped.forEach(w => {
+        chunks.push(textEncoder.encode(leftPad + alignText(w, cols, item.align || 'left') + '\n'));
+      });
+      // Reset inline bold/size if specified
+      if (item.style?.bold || item.style?.doubleHeight) {
+        chunks.push(state.transitionTo({ bold: false, doubleHeight: false, doubleWidth: false }));
+      }
+    } else if (item.type === 'flex_row') {
+      const isBold = item.isBold === true || item.style?.bold === true;
+      chunks.push(state.transitionTo({ align: 'left', bold: isBold, ...item.style }));
+      const formatted = formatFlexRow(item.leftText, item.rightText, cols);
+      formatted.forEach(f => {
+        chunks.push(textEncoder.encode(leftPad + f + '\n'));
+      });
+      if (isBold) {
+        chunks.push(state.transitionTo({ bold: false }));
+      }
+    } else if (item.type === 'drawer') {
+      // ESC p 0 25 250 (Cash Drawer Pulse)
+      chunks.push(new Uint8Array([0x1B, 0x70, 0x00, 0x19, 0xFA]));
+    } else if (item.type === 'cut') {
+      // GS V 66 0 (Full Auto Cut)
+      chunks.push(new Uint8Array([0x1D, 0x56, 0x42, 0x00]));
+    }
+  }
+
+  // Final Reset
+  chunks.push(state.getInitBytes());
+
+  // Flatten Chunks into Single Uint8Array
+  const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+  const finalBuffer = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) {
+    finalBuffer.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return finalBuffer;
+}
+
+// -----------------------------------------------------------------------------
+// 6. HTML GENERATOR FOR SYSTEM SPOOLER (ZERO CLIPPING / WEBBROWSER PRINTING)
+// -----------------------------------------------------------------------------
+
+export function generateReceiptHtmlFromMatrix(
+  matrix: MatrixLine[],
+  profile: PhysicalPrinterProfile,
+  customDocSettings?: any,
+  customLayoutSettings?: any
+): string {
+  const widthCss = profile.paperSize === '80mm' ? '72mm' : '48mm';
+  const fontSizeCss = profile.paperSize === '80mm' ? '12px' : '10px';
+  const globalBold = customLayoutSettings?.bold === true;
+
+  let bodyHtml = '';
+
+  for (const item of matrix) {
+    if (item.type === 'blank') {
+      bodyHtml += `<div style="height: ${12 * (item.count || 1)}px;"></div>`;
+    } else if (item.type === 'divider') {
+      const border = item.double ? '2px solid #000' : '1px dashed #000';
+      bodyHtml += `<div style="border-top: ${border}; margin: 3px 0;"></div>`;
+    } else if (item.type === 'text') {
+      const align = item.align || 'left';
+      const isBold = item.style?.bold || globalBold;
+      const weight = isBold ? '900' : '600';
+      const size = item.style?.doubleHeight ? '1.25em' : '1em';
+      bodyHtml += `<div style="text-align: ${align}; font-weight: ${weight}; font-size: ${size}; margin: 1px 0;">${escapeHtml(item.text)}</div>`;
+    } else if (item.type === 'flex_row') {
+      const isBold = item.isBold || item.style?.bold || globalBold;
+      const weight = isBold ? '900' : '600';
+      bodyHtml += `
+        <div style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; font-weight: ${weight}; margin: 1px 0;">
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px;">${escapeHtml(item.leftText)}</span>
+          <span style="white-space: nowrap; font-variant-numeric: tabular-nums;">${escapeHtml(item.rightText)}</span>
+        </div>
+      `;
+    } else if (item.type === 'qrcode') {
+      bodyHtml += `<div style="text-align: center; font-weight: 800; padding: 4px; border: 1px dashed #000; margin: 4px 0;">[QRCODE: ${escapeHtml(item.text)}]</div>`;
+    } else if (item.type === 'barcode') {
+      bodyHtml += `<div style="text-align: center; font-weight: 800; padding: 4px; border: 1px dashed #000; margin: 4px 0;">[BARCODE: ${escapeHtml(item.code)}]</div>`;
+    }
+  }
 
   return `
     <!DOCTYPE html>
@@ -637,7 +655,7 @@ export function generateReceiptHtml(
             padding: 0 1mm 4mm 1mm;
             font-family: 'Courier New', 'Consolas', 'Liberation Mono', monospace;
             font-size: ${fontSizeCss};
-            font-weight: ${globalWeight};
+            font-weight: ${globalBold ? '900' : '700'};
             line-height: 1.25;
             white-space: normal;
             word-break: break-word;
@@ -647,15 +665,58 @@ export function generateReceiptHtml(
         </style>
       </head>
       <body>
-        ${htmlBody}
+        ${bodyHtml}
       </body>
     </html>
   `;
 }
 
-// Helper to escape HTML characters
+// -----------------------------------------------------------------------------
+// 7. BACKWARD COMPATIBILITY WRAPPERS
+// -----------------------------------------------------------------------------
+
+export function generateReceiptText(
+  typeOrPayload: any,
+  maybeData?: any,
+  overridePaperSize?: string,
+  customDocSettings?: any
+): string {
+  const profile = getPhysicalPrinterProfile(overridePaperSize);
+  const matrix = buildDocumentMatrix(typeOrPayload, maybeData, profile, customDocSettings);
+  return renderMatrixToText(matrix, profile);
+}
+
+export function generateEscPosBuffer(
+  receiptTextOrMatrix: any,
+  options?: any
+): Uint8Array {
+  const profile = getPhysicalPrinterProfile(options?.paperSize, options);
+  let matrix: MatrixLine[];
+  
+  if (Array.isArray(receiptTextOrMatrix)) {
+    matrix = receiptTextOrMatrix;
+  } else {
+    // If passed raw string, build standard matrix
+    matrix = buildDocumentMatrix('sale', { text: receiptTextOrMatrix }, profile);
+  }
+
+  return renderMatrixToEscPosBuffer(matrix, profile, options);
+}
+
+export function generateReceiptHtml(
+  typeOrPayload: any,
+  maybeData?: any,
+  overridePaperSize?: string,
+  customDocSettings?: any,
+  customLayoutSettings?: any
+): string {
+  const profile = getPhysicalPrinterProfile(overridePaperSize);
+  const matrix = buildDocumentMatrix(typeOrPayload, maybeData, profile, customDocSettings);
+  return generateReceiptHtmlFromMatrix(matrix, profile, customDocSettings, customLayoutSettings);
+}
+
 function escapeHtml(str: string): string {
-  return str
+  return (str || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -663,7 +724,18 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-// Instant Silent Printing via Hidden Iframe (System Printer / Windows Spooler)
+// Hex Preview Helper
+export function bufferToHexPreview(buffer: Uint8Array, maxBytes: number = 32): string {
+  if (!buffer || buffer.length === 0) return '00';
+  const slice = buffer.slice(0, maxBytes);
+  const hex = Array.from(slice).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+  return buffer.length > maxBytes ? `${hex} ... (+${buffer.length - maxBytes} bytes)` : hex;
+}
+
+// -----------------------------------------------------------------------------
+// 8. TRANSPORT LAYER (SYSTEM, WEBUSB, WEBSERIAL, SPOOLER)
+// -----------------------------------------------------------------------------
+
 export function printViaSystemBrowser(receiptTextOrHtml: string, paperSize: string = '58mm', customHtml?: string): Promise<boolean> {
   return new Promise((resolve) => {
     const widthCss = paperSize === '80mm' ? '72mm' : '48mm';
@@ -741,7 +813,6 @@ export function printViaSystemBrowser(receiptTextOrHtml: string, paperSize: stri
   });
 }
 
-// WebUSB Direct Real Execution & Discovery
 export async function connectAndPrintWebUSB(buffer: Uint8Array, promptIfMissing: boolean = false): Promise<{ success: boolean; durationMs: number; errorMsg?: string }> {
   const start = performance.now();
   if (!('usb' in navigator)) {
@@ -775,18 +846,16 @@ export async function connectAndPrintWebUSB(buffer: Uint8Array, promptIfMissing:
     if (endpoint) {
       await device.transferOut(endpoint.endpointNumber, buffer);
       await device.close();
-      const durationMs = Math.round(performance.now() - start);
-      return { success: true, durationMs };
+      return { success: true, durationMs: Math.round(performance.now() - start) };
     } else {
       await device.close();
-      return { success: false, durationMs: Math.round(performance.now() - start), errorMsg: 'ERR_USB_ENDPOINT_NOT_FOUND: Endpoint de saída USB não encontrado no dispositivo.' };
+      return { success: false, durationMs: Math.round(performance.now() - start), errorMsg: 'ERR_USB_ENDPOINT_NOT_FOUND: Endpoint de saída USB não encontrado.' };
     }
   } catch (err: any) {
     return { success: false, durationMs: Math.round(performance.now() - start), errorMsg: `ERR_WEBUSB_TRANSFER: ${err.message || String(err)}` };
   }
 }
 
-// WebSerial Direct Real Execution & Discovery
 export async function connectAndPrintWebSerial(buffer: Uint8Array, baudRate: number = 9600): Promise<{ success: boolean; durationMs: number; errorMsg?: string }> {
   const start = performance.now();
   if (!('serial' in navigator)) {
@@ -800,14 +869,56 @@ export async function connectAndPrintWebSerial(buffer: Uint8Array, baudRate: num
     await writer.write(buffer);
     writer.releaseLock();
     await port.close();
-    const durationMs = Math.round(performance.now() - start);
-    return { success: true, durationMs };
+    return { success: true, durationMs: Math.round(performance.now() - start) };
   } catch (err: any) {
     return { success: false, durationMs: Math.round(performance.now() - start), errorMsg: `ERR_WEBSERIAL_TRANSFER: ${err.message || String(err)}` };
   }
 }
 
-// Main Dispatcher Function for Instant Thermal Printing
+// Spooler Local Database Helpers
+export function getSpoolQueue(): SpoolJob[] {
+  try {
+    const raw = localStorage.getItem('adegaos_spool_queue_v2');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return [];
+}
+
+export function addSpoolJob(job: SpoolJob) {
+  try {
+    const current = getSpoolQueue();
+    const updated = [job, ...current].slice(0, 50);
+    localStorage.setItem('adegaos_spool_queue_v2', JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('adegaos_spool_updated'));
+  } catch (e) {}
+}
+
+export function clearSpoolQueue() {
+  localStorage.removeItem('adegaos_spool_queue_v2');
+  window.dispatchEvent(new CustomEvent('adegaos_spool_updated'));
+}
+
+export function getSavedPrinters(): PrinterDevice[] {
+  try {
+    const raw = localStorage.getItem('adegaos_printers_list');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return DEFAULT_PRINTERS;
+}
+
+export function savePrinters(printers: PrinterDevice[]) {
+  localStorage.setItem('adegaos_printers_list', JSON.stringify(printers));
+}
+
+export const DEFAULT_PRINTERS: PrinterDevice[] = [
+  { id: 'prn_main_caixa', name: 'IMP-01 [CAIXA PRINCIPAL]', sector: 'caixa', method: 'system', paperSize: '58mm', enabled: true, autoCut: true, copies: 1 },
+  { id: 'prn_cozinha_01', name: 'IMP-02 [COZINHA & PREPARO]', sector: 'cozinha', method: 'network', connectionIp: '192.168.1.201:9100', paperSize: '80mm', enabled: true, autoCut: true, copies: 1 }
+];
+
+// -----------------------------------------------------------------------------
+// 9. MAIN DISPATCHER FUNCTION FOR INSTANT THERMAL PRINTING
+// -----------------------------------------------------------------------------
+
 export async function triggerThermalPrint(
   typeOrPayload: any,
   maybeData?: any,
@@ -852,12 +963,17 @@ export async function triggerThermalPrint(
         }
       } catch (e) {}
 
+      const hardwareConfig = enterpriseConfig?.hardware || { paperSize: printer.paperSize, autoCut: printer.autoCut };
       const docSettings = enterpriseConfig?.document || {};
       const layoutSettings = enterpriseConfig?.layout || {};
 
-      const receiptText = generateReceiptText(typeOrPayload, maybeData, printer.paperSize, docSettings);
-      const receiptHtml = generateReceiptHtml(typeOrPayload, maybeData, printer.paperSize, docSettings, layoutSettings);
-      const escPosBuffer = generateEscPosBuffer(receiptText, { autoCut: printer.autoCut, bold: layoutSettings.bold });
+      const profile = getPhysicalPrinterProfile(printer.paperSize, hardwareConfig, layoutSettings);
+      const matrix = buildDocumentMatrix(typeOrPayload, maybeData, profile, docSettings);
+
+      const receiptText = renderMatrixToText(matrix, profile);
+      const escPosBuffer = renderMatrixToEscPosBuffer(matrix, profile, layoutSettings);
+      const receiptHtml = generateReceiptHtmlFromMatrix(matrix, profile, docSettings, layoutSettings);
+
       totalBytes += escPosBuffer.length;
 
       localStorage.setItem('adegaos_last_receipt', receiptText);
@@ -883,12 +999,10 @@ export async function triggerThermalPrint(
       const durationMs = Math.round(performance.now() - start);
 
       if (!res.success && printer.method !== 'system') {
-        // Fallback to system spooler on hardware direct fail
         console.warn(`[Printer Engine] Direct hardware failed (${res.errorMsg}). Falling back to System Spooler.`);
         await printViaSystemBrowser(receiptText, printer.paperSize, receiptHtml);
       }
 
-      // Record in Spooler Queue
       const job: SpoolJob = {
         id: `JOB_${Date.now()}_${Math.floor(Math.random()*1000)}`,
         printerId: printer.id,

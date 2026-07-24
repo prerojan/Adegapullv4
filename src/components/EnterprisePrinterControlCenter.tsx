@@ -43,9 +43,15 @@ import {
   SpoolJob,
   generateEscPosBuffer,
   generateReceiptText,
+  generateReceiptHtml,
   bufferToHexPreview,
   connectAndPrintWebUSB,
-  connectAndPrintWebSerial
+  connectAndPrintWebSerial,
+  getPhysicalPrinterProfile,
+  buildDocumentMatrix,
+  renderMatrixToText,
+  renderMatrixToEscPosBuffer,
+  generateReceiptHtmlFromMatrix
 } from '../lib/thermalPrinter';
 
 export interface EnterprisePrinterConfig {
@@ -586,16 +592,12 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
     const startTime = performance.now();
 
     try {
-      const receiptText = generateReceiptText('sale', testData, currentConfig.hardware.paperSize, currentConfig.document);
-      const escPosBuffer = generateEscPosBuffer(receiptText, {
-        autoCut: currentConfig.hardware.autoCut,
-        cashDrawer: currentConfig.hardware.cashDrawer,
-        align: currentConfig.layout.align,
-        fontFamily: currentConfig.layout.fontFamily,
-        bold: currentConfig.layout.bold,
-        scaleHorizontal: currentConfig.layout.scaleHorizontal,
-        scaleVertical: currentConfig.layout.scaleVertical
-      });
+      const profile = getPhysicalPrinterProfile(currentConfig.hardware.paperSize, currentConfig.hardware, currentConfig.layout);
+      const matrix = buildDocumentMatrix('diagnostic', { model: currentConfig.hardware.model }, profile, currentConfig.document);
+
+      const receiptText = renderMatrixToText(matrix, profile);
+      const escPosBuffer = renderMatrixToEscPosBuffer(matrix, profile, currentConfig.layout);
+      const testHtml = generateReceiptHtmlFromMatrix(matrix, profile, currentConfig.document, currentConfig.layout);
 
       let res: { success: boolean; durationMs: number; bytesCount: number; errorMsg?: string } = {
         success: false,
@@ -656,8 +658,7 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
         };
       } else {
         // System Spooler
-        const { printViaSystemBrowser, generateReceiptHtml } = await import('../lib/thermalPrinter');
-        const testHtml = generateReceiptHtml('sale', testData, currentConfig.hardware.paperSize, currentConfig.document, currentConfig.layout);
+        const { printViaSystemBrowser } = await import('../lib/thermalPrinter');
         const ok = await printViaSystemBrowser(receiptText, currentConfig.hardware.paperSize, testHtml);
         res = {
           success: ok,
@@ -715,8 +716,14 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
     }
   };
 
-  // Generate live ESC/POS receipt text & buffer for preview
-  const liveReceiptText = generateReceiptText(
+  // Generate live ESC/POS receipt matrix, text & buffer for preview
+  const liveProfile = getPhysicalPrinterProfile(
+    currentConfig.hardware.paperSize,
+    currentConfig.hardware,
+    currentConfig.layout
+  );
+
+  const liveMatrix = buildDocumentMatrix(
     'sale',
     {
       number: '1001',
@@ -725,19 +732,12 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
       totalAmount: 120.0,
       items: [{ quantity: 1, name: 'VINHO CABERNET SAUVIGNON 750ML', totalPrice: 120.0 }]
     },
-    currentConfig.hardware.paperSize,
+    liveProfile,
     currentConfig.document
   );
 
-  const liveEscPosBuffer = generateEscPosBuffer(liveReceiptText, {
-    autoCut: currentConfig.hardware.autoCut,
-    cashDrawer: currentConfig.hardware.cashDrawer,
-    align: currentConfig.layout.align,
-    fontFamily: currentConfig.layout.fontFamily,
-    bold: currentConfig.layout.bold,
-    scaleHorizontal: currentConfig.layout.scaleHorizontal,
-    scaleVertical: currentConfig.layout.scaleVertical
-  });
+  const liveReceiptText = renderMatrixToText(liveMatrix, liveProfile);
+  const liveEscPosBuffer = renderMatrixToEscPosBuffer(liveMatrix, liveProfile, currentConfig.layout);
 
   const isDark = theme === 'dark';
 
