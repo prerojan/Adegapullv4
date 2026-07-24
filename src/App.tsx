@@ -28,13 +28,17 @@ import {
   fetchUsersFromDb,
   saveUserToDb,
   deleteUserFromDb,
+  fetchCategoriesFromDb,
+  saveCategoryToDb,
+  deleteCategoryFromDb,
   isFirebaseEnabled,
   subscribeProducts,
   subscribeSales,
   subscribeSuppliers,
   subscribeTransactions,
   subscribeTablesComandas,
-  subscribeUsers
+  subscribeUsers,
+  subscribeCategories
 } from './lib/firebase';
 
 
@@ -443,12 +447,16 @@ export default function App() {
       if (prev.includes(trimmed)) return prev;
       return [...prev, trimmed];
     });
+    saveCategoryToDb(trimmed);
   };
 
   const handleRenameCategory = (oldName: string, newName: string) => {
     const trimmedNew = newName.trim();
     if (!trimmedNew || oldName === trimmedNew) return;
     setProductCategories(prev => prev.map(cat => cat === oldName ? trimmedNew : cat));
+
+    deleteCategoryFromDb(oldName);
+    saveCategoryToDb(trimmedNew);
 
     // Update all products belonging to this category
     setProducts(prevProducts => {
@@ -465,6 +473,7 @@ export default function App() {
 
   const handleDeleteCategory = (catName: string) => {
     setProductCategories(prev => prev.filter(cat => cat !== catName));
+    deleteCategoryFromDb(catName);
 
     // Move all products belonging to this category to 'Outros'
     setProducts(prevProducts => {
@@ -549,17 +558,19 @@ export default function App() {
     let unsubTransactions: (() => void) | null = null;
     let unsubTables: (() => void) | null = null;
     let unsubUsers: (() => void) | null = null;
+    let unsubCategories: (() => void) | null = null;
 
     async function loadAllDataAndSubscribe() {
       try {
         // 1. Initial fetch (handles seeding if Firestore is empty)
-        const [p, s, sup, tx, tc, u] = await Promise.all([
+        const [p, s, sup, tx, tc, u, c] = await Promise.all([
           fetchProductsFromDb(),
           fetchSalesFromDb(),
           fetchSuppliersFromDb(),
           fetchTransactionsFromDb(),
           fetchTablesComandasFromDb(),
-          fetchUsersFromDb()
+          fetchUsersFromDb(),
+          fetchCategoriesFromDb()
         ]);
         setProducts(p);
         setSales(s);
@@ -567,6 +578,7 @@ export default function App() {
         setFinancialTransactions(tx);
         setTablesComandas(tc);
         setUsersList(u);
+        if (c && c.length > 0) setProductCategories(c);
         setLoading(false);
 
         // 2. Subscribe to real-time changes
@@ -576,6 +588,7 @@ export default function App() {
         unsubTransactions = subscribeTransactions(setFinancialTransactions);
         unsubTables = subscribeTablesComandas(setTablesComandas);
         unsubUsers = subscribeUsers(setUsersList);
+        unsubCategories = subscribeCategories(setProductCategories);
       } catch (err) {
         console.error("Error loading initial data and subscribing:", err);
         setLoading(false);
@@ -591,6 +604,7 @@ export default function App() {
       if (unsubTransactions) unsubTransactions();
       if (unsubTables) unsubTables();
       if (unsubUsers) unsubUsers();
+      if (unsubCategories) unsubCategories();
     };
   }, []);
 
@@ -1433,6 +1447,7 @@ export default function App() {
                   onUpdateUserRole={handleUpdateUserRole}
                   theme={theme}
                   onToggleTheme={handleToggleTheme}
+                  products={products}
                 />
               )}
               {managerActiveTab === 'importador' && (

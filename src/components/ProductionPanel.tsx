@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { ChefHat, GlassWater, Clock, Check, Play, User, RefreshCw, Layers, CheckCircle2, Volume2, Search, LogOut, Sun, Moon, Printer, Sparkles, Wifi } from 'lucide-react';
+import { ChefHat, GlassWater, Clock, Check, Play, User, RefreshCw, Layers, CheckCircle2, Volume2, Search, LogOut, Sun, Moon, Printer, Sparkles, Wifi, Sliders, Tag, X } from 'lucide-react';
 import { TableComandaState, Product, CashierUser } from '../types';
 import { ToastContainer, ToastItem, ToastType, playPremiumSound } from './ToastNotification';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
+import { shouldCategoryGoToProduction, getCategoryProductionSector } from '../lib/productionCategories';
+import ProductionCategoryConfigManager from './ProductionCategoryConfigManager';
 
 interface ProductionPanelProps {
   tablesComandas: TableComandaState[];
@@ -39,6 +41,7 @@ export default function ProductionPanel({
   const [filterStatus, setFilterStatus] = useState<'ativos' | 'finalizados'>('ativos');
   const [searchFilter, setSearchFilter] = useState('');
   const [beepSimulated, setBeepSimulated] = useState(false);
+  const [showCategoryConfigModal, setShowCategoryConfigModal] = useState(false);
 
   // Toasts local state
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -192,10 +195,13 @@ export default function ProductionPanel({
         const prodName = prod ? prod.name : 'Produto Desconhecido';
         const category = prod ? prod.category : 'Outros';
 
-        // Filter sector: Kitchen categories go to Cozinha, others go to Bar
-        const kitchenCategories = ['petisco', 'cozinha', 'lanche', 'porção', 'porcao', 'pizza', 'prato', 'comida', 'sobremesa'];
-        const belongsToKitchen = kitchenCategories.some(cat => category.toLowerCase().includes(cat));
-        const itemSector = belongsToKitchen ? 'cozinha' : 'bar';
+        // Check if category is configured to go to production
+        if (!shouldCategoryGoToProduction(category)) {
+          return;
+        }
+
+        // Get configured target sector for this category
+        const itemSector = getCategoryProductionSector(category);
 
         if (activeSector !== 'todos' && itemSector !== activeSector) return;
 
@@ -437,6 +443,20 @@ export default function ProductionPanel({
             <span>Sinalizador Ativo</span>
           </button>
 
+          {/* Production Category Configuration Trigger */}
+          <button
+            onClick={() => setShowCategoryConfigModal(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] border font-bold transition-all cursor-pointer ${
+              theme === 'dark' 
+                ? 'border-[#18F2A4]/30 bg-[#18F2A4]/10 text-[#18F2A4] hover:bg-[#18F2A4]/20' 
+                : 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+            }`}
+            title="Configurar quais categorias vão ou não para a produção"
+          >
+            <Tag className="w-3.5 h-3.5" />
+            <span>Categorias da Produção</span>
+          </button>
+
 
 
           {/* Sector selector buttons */}
@@ -672,6 +692,21 @@ export default function ProductionPanel({
 
       {/* Embedded non-blocking Toast System */}
       <ToastContainer toasts={toasts} onRemove={removeToast} theme={theme} />
+
+      {/* Production Category Rules Modal */}
+      {showCategoryConfigModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-1 relative shadow-2xl">
+            <button
+              onClick={() => setShowCategoryConfigModal(false)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-xl bg-black/50 text-gray-300 hover:text-white hover:bg-black cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <ProductionCategoryConfigManager theme={theme} products={products} onClose={() => setShowCategoryConfigModal(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

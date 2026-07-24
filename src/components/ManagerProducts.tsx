@@ -1,6 +1,26 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, Filter, Edit, Copy, Archive, Check, X, Tag, FileSpreadsheet, Percent, Trash2, ShieldCheck, SlidersHorizontal, Edit2 } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Copy, Archive, Check, X, Tag, FileSpreadsheet, Percent, Trash2, ShieldCheck, SlidersHorizontal, Edit2, Image, Sparkles } from 'lucide-react';
 import { Product, Supplier, RecipeItem } from '../types';
+
+const REFERENCE_BEVERAGE_IMAGES = [
+  { name: 'Cerveja Long Neck Heineken', category: 'Cervejas', keywords: ['heineken', 'cerveja', 'longneck', 'pilsen', 'verde'], url: 'https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Cerveja Artesanal Lager', category: 'Cervejas', keywords: ['cerveja', 'artesanal', 'lager', 'ipa', 'garrafa'], url: 'https://images.unsplash.com/photo-1535958636474-b021ee887b13?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Cerveja Lata Pilsen', category: 'Cervejas', keywords: ['cerveja', 'lata', 'pilsen', 'gelada'], url: 'https://images.unsplash.com/photo-1584225065152-4a1454aa3d4e?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Chopp em Caneca Gelada', category: 'Cervejas', keywords: ['chopp', 'caneca', 'cerveja', 'gelada', 'espuma'], url: 'https://images.unsplash.com/photo-1571624436279-b272aff752b5?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Whisky Scotch On The Rocks', category: 'Destilados', keywords: ['whisky', 'bourbon', 'scotch', 'gelo', 'destilados'], url: 'https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Vodka Premium Garrafa', category: 'Destilados', keywords: ['vodka', 'absolut', 'smirnoff', 'destilados'], url: 'https://images.unsplash.com/photo-1563227812-0ea4c22e6cc8?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Gin Tônica com Laranja', category: 'Destilados', keywords: ['gin', 'tonica', 'tanqueray', 'drink', 'destilados'], url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Caipirinha / Cachaça', category: 'Destilados', keywords: ['cachaca', 'caipirinha', 'limao', 'destilados'], url: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Tequila Shot com Sal', category: 'Destilados', keywords: ['tequila', 'shot', 'sal', 'destilados'], url: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Refrigerante Cola Lata', category: 'Sem Álcool', keywords: ['refrigerante', 'coca', 'cola', 'lata', 'refri', 'sem alcool'], url: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Energético Lata Gelada', category: 'Sem Álcool', keywords: ['energetico', 'redbull', 'monster', 'lata', 'sem alcool'], url: 'https://images.unsplash.com/photo-1622543925917-763c34d1a86e?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Água Mineral com Gás', category: 'Sem Álcool', keywords: ['agua', 'mineral', 'gas', 'garrafa', 'sem alcool'], url: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Suco de Laranja Jarra', category: 'Sem Álcool', keywords: ['suco', 'laranja', 'jarra', 'sem alcool'], url: 'https://images.unsplash.com/photo-1613478223719-2ab802602423?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Vinho Tinto Garrafa e Taça', category: 'Vinhos', keywords: ['vinho', 'tinto', 'garrafa', 'taca', 'vinhos'], url: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Vinho Branco / Espumante', category: 'Vinhos', keywords: ['vinho', 'branco', 'espumante', 'prosecco', 'vinhos'], url: 'https://images.unsplash.com/photo-1558001373-7b93ee48ffa0?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Saco / Balde de Gelo', category: 'Outros', keywords: ['gelo', 'saco', 'balde', 'outros'], url: 'https://images.unsplash.com/photo-1516715094483-75da7dee9758?auto=format&fit=crop&w=600&q=80' },
+  { name: 'Petiscos / Amendoim & Castanhas', category: 'Petiscos', keywords: ['petisco', 'amendoim', 'castanha', 'snack', 'petiscos'], url: 'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?auto=format&fit=crop&w=600&q=80' }
+];
 
 interface ManagerProductsProps {
   products: Product[];
@@ -60,6 +80,20 @@ export default function ManagerProducts({
   const [ageRestricted, setAgeRestricted] = useState(true);
   const [notes, setNotes] = useState('');
   const [image, setImage] = useState('');
+
+  // Reference Image Gallery Modal State
+  const [showImageSearchModal, setShowImageSearchModal] = useState(false);
+  const [refImageSearchTerm, setRefImageSearchTerm] = useState('');
+
+  const filteredReferenceImages = useMemo(() => {
+    if (!refImageSearchTerm.trim()) return REFERENCE_BEVERAGE_IMAGES;
+    const term = refImageSearchTerm.toLowerCase().trim();
+    return REFERENCE_BEVERAGE_IMAGES.filter(img => 
+      img.name.toLowerCase().includes(term) ||
+      img.category.toLowerCase().includes(term) ||
+      img.keywords.some(k => k.includes(term))
+    );
+  }, [refImageSearchTerm]);
 
   // Advanced Inventory States
   const [hasTechnicalSheet, setHasTechnicalSheet] = useState(false);
@@ -980,8 +1014,8 @@ export default function ManagerProducts({
                         </button>
                       )}
                     </div>
-                    {/* Local File uploader */}
-                    <div className="flex gap-2 items-center">
+                    {/* Local File uploader & Reference Search */}
+                    <div className="flex flex-wrap gap-2 items-center">
                       <label className={`text-[10px] font-bold px-2.5 py-1.5 rounded border cursor-pointer transition-all active:scale-95 flex items-center gap-1.5 ${
                         theme === 'dark' ? 'bg-[#1A1A1A] border-[#252525] hover:bg-[#222] text-[#18F2A4]' : 'bg-white border-gray-200 hover:bg-gray-50 text-[#10B981]'
                       }`}>
@@ -993,6 +1027,21 @@ export default function ManagerProducts({
                           className="hidden"
                         />
                       </label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRefImageSearchTerm(name || category || '');
+                          setShowImageSearchModal(true);
+                        }}
+                        className={`text-[10px] font-bold px-2.5 py-1.5 rounded border transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                          theme === 'dark' ? 'bg-[#18F2A4]/10 border-[#18F2A4]/30 text-[#18F2A4] hover:bg-[#18F2A4]/20' : 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                        }`}
+                      >
+                        <Search className="w-3 h-3" />
+                        <span>Buscar Foto de Referência</span>
+                      </button>
+
                       {image && image.startsWith('data:image') && (
                         <span className="text-[9px] text-emerald-500 font-bold flex items-center gap-0.5">
                           <Check className="w-3 h-3" /> Arquivo Carregado
@@ -1247,6 +1296,74 @@ export default function ManagerProducts({
               >
                 Fechar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reference Image Library Modal */}
+      {showImageSearchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className={`w-full max-w-2xl max-h-[85vh] rounded-2xl border flex flex-col overflow-hidden shadow-2xl ${
+            theme === 'dark' ? 'bg-[#0E0E0E] border-[#222] text-white' : 'bg-white border-gray-200 text-gray-900'
+          }`}>
+            <div className={`p-4 border-b flex justify-between items-center ${
+              theme === 'dark' ? 'border-[#1C1C1C]' : 'border-gray-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#18F2A4]" />
+                <h3 className="font-bold text-sm tracking-tight">Galeria de Fotos de Referência (Licença Livre)</h3>
+              </div>
+              <button onClick={() => setShowImageSearchModal(false)} className="text-gray-400 hover:text-white p-1 cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 flex flex-col gap-3 overflow-y-auto flex-1">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Busque por cerveja, heineken, whisky, refrigerante, gelo..."
+                  value={refImageSearchTerm}
+                  onChange={(e) => setRefImageSearchTerm(e.target.value)}
+                  className={`w-full pl-9 pr-3 py-2 text-xs rounded-xl border outline-none ${
+                    theme === 'dark' ? 'bg-[#141414] border-[#222] text-white focus:border-[#18F2A4]' : 'bg-gray-50 border-gray-200 text-gray-900'
+                  }`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-1">
+                {filteredReferenceImages.map((item, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      setImage(item.url);
+                      setShowImageSearchModal(false);
+                    }}
+                    className={`group relative rounded-xl border overflow-hidden cursor-pointer transition-all hover:scale-[1.02] ${
+                      image === item.url 
+                        ? (theme === 'dark' ? 'border-[#18F2A4] ring-2 ring-[#18F2A4]/30' : 'border-emerald-500 ring-2 ring-emerald-500/30') 
+                        : (theme === 'dark' ? 'border-[#222] hover:border-gray-600' : 'border-gray-200 hover:border-gray-400')
+                    }`}
+                  >
+                    <div className="aspect-square w-full overflow-hidden bg-black/40 relative">
+                      <img
+                        src={item.url}
+                        alt={item.name}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="absolute top-1.5 left-1.5 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-black/70 text-white backdrop-blur-xs">
+                        {item.category}
+                      </span>
+                    </div>
+                    <div className="p-2 text-[10px] font-semibold truncate">
+                      {item.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

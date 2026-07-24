@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Users, Store, ShieldAlert, Key, Plus, Save, ToggleLeft, ToggleRight, X, Trash2, Shield, Download, Laptop, Printer, Sliders, Play, Check, AlertCircle, FileText, Sparkles, RefreshCw, Volume2, Wifi, Usb, Bluetooth, HelpCircle, Award, Mail, Phone, Lock, Edit3, CheckCircle2, Server, Globe, Tablet, Radio, Zap } from 'lucide-react';
-import { CashierUser } from '../types';
+import { Settings, Users, Store, ShieldAlert, Key, Plus, Save, ToggleLeft, ToggleRight, X, Trash2, Shield, Download, Laptop, Printer, Sliders, Play, Check, AlertCircle, FileText, Sparkles, RefreshCw, Volume2, Wifi, Usb, Bluetooth, HelpCircle, Award, Mail, Phone, Lock, Edit3, CheckCircle2, Server, Globe, Tablet, Radio, Zap, ChefHat, Tag } from 'lucide-react';
+import { CashierUser, Product } from '../types';
 import { PrinterDevice, getSavedPrinters, savePrinters, triggerThermalPrint } from '../lib/thermalPrinter';
 import EnterprisePrinterControlCenter from './EnterprisePrinterControlCenter';
+import ProductionCategoryConfigManager from './ProductionCategoryConfigManager';
 
 interface ManagerSettingsProps {
   usersList: CashierUser[];
@@ -12,6 +13,7 @@ interface ManagerSettingsProps {
   onUpdateUserRole: (userId: string, newRole: 'admin' | 'manager' | 'finance' | 'cashier' | 'waiter' | 'stock') => void;
   theme: 'dark' | 'light';
   onToggleTheme?: () => void;
+  products?: Product[];
 }
 
 export default function ManagerSettings({
@@ -21,10 +23,11 @@ export default function ManagerSettings({
   onDeleteUser,
   onUpdateUserRole,
   theme,
-  onToggleTheme
+  onToggleTheme,
+  products
 }: ManagerSettingsProps) {
   // Topic Tab Selector State
-  type SETTINGS_TOPIC = 'general' | 'printers' | 'staff' | 'terminals';
+  type SETTINGS_TOPIC = 'general' | 'printers' | 'categories' | 'staff' | 'terminals';
   const [activeTopic, setActiveTopic] = useState<SETTINGS_TOPIC>('general');
 
   // Corporate states
@@ -373,6 +376,19 @@ export default function ManagerSettings({
         >
           <Printer className="w-4 h-4" />
           <span>Rede de Impressoras & Setores</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTopic('categories')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeTopic === 'categories'
+              ? (theme === 'dark' ? 'bg-[#18F2A4] text-black shadow-md' : 'bg-[#10B981] text-white shadow-md')
+              : 'text-gray-400 hover:text-white hover:bg-gray-500/10'
+          }`}
+        >
+          <ChefHat className="w-4 h-4" />
+          <span>Categorias de Produção (Vão / Não Vão)</span>
         </button>
 
         <button
@@ -965,6 +981,15 @@ export default function ManagerSettings({
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          TOPIC: CATEGORIAS DE PRODUÇÃO (VÃO / NÃO VÃO)
+          ========================================================= */}
+      {activeTopic === 'categories' && (
+        <div className="animate-fade-in">
+          <ProductionCategoryConfigManager theme={theme} products={products} />
         </div>
       )}
 

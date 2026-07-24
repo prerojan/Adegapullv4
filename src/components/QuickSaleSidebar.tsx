@@ -377,8 +377,8 @@ export default function QuickSaleSidebar({
 
         {/* Footer Payment & Checkout */}
         {cart.length > 0 && (
-          <div className={`p-4 border-t flex flex-col gap-4 ${
-            isDark ? 'bg-black/50 border-[#1C1C1C]' : 'bg-white border-gray-200'
+          <div className={`p-4 border-t flex flex-col gap-4 sticky bottom-0 z-20 shrink-0 shadow-lg ${
+            isDark ? 'bg-[#0B0B0B] border-[#1C1C1C]' : 'bg-white border-gray-200'
           }`}>
             {/* Discount box */}
             <div className="flex justify-between items-center gap-3">

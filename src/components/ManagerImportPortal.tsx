@@ -196,7 +196,11 @@ export default function ManagerImportPortal({
         const costPrice = parseFloat(row.Preco_Custo || row.preco_custo || row["Preço de Custo"] || row.cost_price || 0);
         const sellPrice = parseFloat(row.Preco_Venda || row.preco_venda || row["Preço de Venda"] || row.sell_price || 0);
         const unit = String(row.Unidade || row.unidade || row.unit || "UN").toUpperCase().trim();
-        const stockUnits = parseInt(row.Estoque_Unidades || row.estoque_unidades || row["Estoque Unidades"] || row.stock_units || 0, 10);
+        const stockUnits = parseInt(
+          row.Estoque_Unidades || row.estoque_unidades || row["Estoque Unidades"] || row.stock_units || 
+          row.Estoque || row.estoque || row.Quantidade || row.quantidade || row["Quantidade Atual"] || 
+          row["Estoque Atual"] || row.Stock || row.stock || row.Qtd || row.qtd || row.QTD || 0, 10
+        );
         const minStockUnits = parseInt(row.Estoque_Minimo || row.estoque_minimo || row["Estoque Mínimo"] || row.min_stock || 0, 10);
         const brand = String(row.Marca || row.marca || row.brand || "").trim();
 
@@ -667,6 +671,7 @@ export default function ManagerImportPortal({
                       <th className="p-2">Nome / Razão</th>
                       {activeTab === 'produtos' && <th className="p-2">Categoria</th>}
                       {activeTab === 'produtos' && <th className="p-2 text-right">Venda</th>}
+                      {activeTab === 'produtos' && <th className="p-2 text-center">Estoque Atual</th>}
                       {activeTab === 'produtos' && <th className="p-2">Cod. Barras</th>}
                       {activeTab === 'funcionarios' && <th className="p-2">PIN</th>}
                       {activeTab === 'funcionarios' && <th className="p-2">Cargo</th>}
@@ -679,6 +684,7 @@ export default function ManagerImportPortal({
                         <td className="p-2 font-semibold truncate max-w-[150px]">{p.name}</td>
                         <td className="p-2">{p.category}</td>
                         <td className="p-2 text-right font-mono font-bold">R$ {p.sellPrice.toFixed(2)}</td>
+                        <td className={`p-2 text-center font-mono font-bold ${p.stockUnits > 0 ? (theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700') : 'text-gray-400'}`}>{p.stockUnits} un</td>
                         <td className="p-2 text-gray-400 font-mono">{p.barcode || <span className="text-amber-500 italic">Pendente scan</span>}</td>
                       </tr>
                     ))}

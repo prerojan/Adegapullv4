@@ -537,11 +537,11 @@ export default function AdminPanel({
         />
       )}
 
-      {/* 2. LATERAL SIDEBAR NAVBAR (RESPONSIVE DRAWER IN MOBILE, FIXED ASIDE IN DESKTOP) */}
+      {/* 2. LATERAL SIDEBAR NAVBAR (RESPONSIVE DRAWER IN MOBILE, FIXED/STICKY ASIDE IN DESKTOP) */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-64 border-r flex flex-col justify-between shrink-0 h-full transition-transform duration-300 ease-in-out
         ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:relative md:translate-x-0 md:flex
+        md:relative md:translate-x-0 md:flex lg:sticky lg:top-0 lg:h-screen lg:shrink-0
         ${theme === 'dark' ? 'bg-[#080808] border-[#111]' : 'bg-white border-gray-200 shadow-md'}
       `}>
         <div className="flex flex-col">

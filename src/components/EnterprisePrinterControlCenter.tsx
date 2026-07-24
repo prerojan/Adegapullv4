@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import ProductionCategoryConfigManager from './ProductionCategoryConfigManager';
 import {
   Printer,
   Wifi,
@@ -1894,6 +1895,11 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                     {currentConfig.rules.autoPrintOnSale ? <ToggleRight className="w-5 h-5 text-[#18F2A4]" /> : <ToggleLeft className="w-5 h-5 text-gray-500" />}
                   </button>
                 </div>
+              </div>
+
+              {/* Category Production Rules Configurator */}
+              <div className="md:col-span-2 mt-2">
+                <ProductionCategoryConfigManager theme={theme} />
               </div>
             </motion.div>
           )}
