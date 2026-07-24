@@ -628,9 +628,16 @@ export function buildDocumentMatrix(
     });
   }
 
+  // Tear-bar Cut Indicator & Spacing for Thermal Printers without Guillotine
+  matrix.push({ type: 'divider', double: true });
+  matrix.push({ type: 'text', text: '- - - - DESTAQUE / CORTE AQUI - - - -', align: 'center', style: { bold: true } });
+  matrix.push({ type: 'divider', double: true });
+
   if (profile.cashDrawer) matrix.push({ type: 'drawer' });
   if (profile.autoCut) matrix.push({ type: 'cut' });
-  matrix.push({ type: 'blank', count: 3 });
+  
+  // Extra line feeds so paper pushes past the tear bar
+  matrix.push({ type: 'blank', count: 6 });
 
   return matrix;
 }
@@ -819,6 +826,9 @@ export function renderMatrixToEscPosBuffer(
     }
   }
 
+  // Feed 6 lines (ESC d 6) to push past the physical paper tear bar on manual printers
+  chunks.push(new Uint8Array([0x1B, 0x64, 0x06, 0x0A, 0x0A, 0x0A]));
+
   // Final Reset
   chunks.push(state.getInitBytes());
 
@@ -923,6 +933,7 @@ export function generateReceiptHtmlFromMatrix(
       </head>
       <body>
         ${bodyHtml}
+        <div style="height: 50px; margin-top: 10px;"></div>
       </body>
     </html>
   `;
@@ -1247,8 +1258,21 @@ export async function triggerThermalPrint(
         }));
         res = { success: true, durationMs: Math.round(performance.now() - start) };
       } else {
-        const ok = await printViaSystemBrowser(receiptText, printer.paperSize, receiptHtml);
-        res = { success: ok, durationMs: Math.round(performance.now() - start) };
+        // Check if current sector is mobile/order terminal
+        const isOrderTerminal = typeof window !== 'undefined' && (
+          window.location.pathname.includes('order') || 
+          window.location.pathname.includes('mobile') || 
+          (window as any).adegaos_active_sector === 'order' ||
+          localStorage.getItem('adegaos_active_sector') === 'order'
+        );
+
+        if (isOrderTerminal) {
+          console.log('[Printer Engine] Suppressed system browser print popup on mobile order terminal.');
+          res = { success: true, durationMs: Math.round(performance.now() - start) };
+        } else {
+          const ok = await printViaSystemBrowser(receiptText, printer.paperSize, receiptHtml);
+          res = { success: ok, durationMs: Math.round(performance.now() - start) };
+        }
       }
 
       const durationMs = Math.round(performance.now() - start);

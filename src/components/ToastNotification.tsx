@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Bell, CheckCircle, AlertTriangle, AlertCircle, X } from 'lucide-react';
+import { audioManager, SoundType } from '../services/audioManager';
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error' | 'ready';
 
@@ -17,37 +18,13 @@ interface ToastContainerProps {
 
 export function playPremiumSound(type: 'success' | 'warning' | 'error' | 'bell' | 'ready' | string) {
   try {
-    // Elegant client-side silent-safe audio feedback using Web Audio API
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    
-    if (type === 'success') {
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.3);
-    } else if (type === 'bell' || type === 'warning') {
-      osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
-    } else {
-      osc.frequency.setValueAtTime(220, ctx.currentTime); // A3
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
-    }
-  } catch {
+    let sound: SoundType = 'ding';
+    if (type === 'success' || type === 'ready') sound = 'order_ready';
+    else if (type === 'warning' || type === 'error') sound = 'order_cancelled';
+    else if (type === 'bell') sound = 'order_created';
+
+    audioManager.play(sound);
+  } catch (e) {
     console.log(`Audio notification triggered: ${type}`);
   }
 }

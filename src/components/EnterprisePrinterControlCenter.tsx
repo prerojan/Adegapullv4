@@ -278,6 +278,7 @@ export const DEFAULT_ENTERPRISE_CONFIGS: EnterprisePrinterConfig[] = [
       buzzer: true
     },
     layout: {
+      leftMarginOffset: 0,
       fontFamily: 'font_a',
       scaleHorizontal: 2,
       scaleVertical: 2,
@@ -1572,7 +1573,7 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                 </div>
                 <button
                   type="button"
-                  onClick={handleTriggerRealHardwareTest}
+                  onClick={handleTriggerFullTestPrint}
                   className="px-4 py-2 rounded-lg bg-[#18F2A4] text-black font-bold text-xs hover:bg-[#15d892] cursor-pointer shrink-0 transition-all shadow-sm"
                 >
                   Testar Impressão de Offset

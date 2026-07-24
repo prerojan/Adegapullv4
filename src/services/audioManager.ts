@@ -19,30 +19,42 @@ class AudioManager {
   constructor() {
     this.loadSettings();
 
-    // Attach Chromium auto-unlock listeners
+    // Attach Chromium & iOS Safari auto-unlock listeners
     if (typeof window !== 'undefined') {
       const unlock = () => {
-        this.initAudioContext();
-        if (this.audioCtx && this.audioCtx.state === 'suspended') {
-          this.audioCtx.resume().then(() => {
+        this.unlockAudio();
+      };
+
+      window.addEventListener('pointerdown', unlock, { passive: true });
+      window.addEventListener('touchstart', unlock, { passive: true });
+      window.addEventListener('keydown', unlock, { passive: true });
+      window.addEventListener('click', unlock, { passive: true });
+    }
+  }
+
+  public unlockAudio(): boolean {
+    try {
+      const ctx = this.initAudioContext();
+      if (ctx) {
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(() => {
             this.isUnlocked = true;
           }).catch(() => {});
         } else {
           this.isUnlocked = true;
         }
 
-        // Remove listeners once unlocked
-        window.removeEventListener('pointerdown', unlock);
-        window.removeEventListener('touchstart', unlock);
-        window.removeEventListener('keydown', unlock);
-        window.removeEventListener('click', unlock);
-      };
-
-      window.addEventListener('pointerdown', unlock, { once: false });
-      window.addEventListener('touchstart', unlock, { once: false });
-      window.addEventListener('keydown', unlock, { once: false });
-      window.addEventListener('click', unlock, { once: false });
-    }
+        // Play brief silent micro-tone inside user gesture tick to unlock browser autoplay policy permanently
+        const silentOsc = ctx.createOscillator();
+        const silentGain = ctx.createGain();
+        silentGain.gain.setValueAtTime(0.00001, ctx.currentTime);
+        silentOsc.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        silentOsc.start(ctx.currentTime);
+        silentOsc.stop(ctx.currentTime + 0.001);
+      }
+    } catch (e) {}
+    return this.isUnlocked;
   }
 
   public loadSettings() {

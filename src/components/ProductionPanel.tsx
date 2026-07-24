@@ -5,6 +5,7 @@ import { ToastContainer, ToastItem, ToastType, playPremiumSound } from './ToastN
 import { triggerThermalPrint } from '../lib/thermalPrinter';
 import { eventBus } from '../services/eventBus';
 import { notificationService } from '../services/notificationService';
+import { audioManager } from '../services/audioManager';
 import { shouldCategoryGoToProduction, getCategoryProductionSector } from '../lib/productionCategories';
 import ProductionCategoryConfigManager from './ProductionCategoryConfigManager';
 
@@ -277,6 +278,9 @@ export default function ProductionPanel({
     });
 
     if (receiptsToPrint.length > 0) {
+      // Play audio chime for production alert
+      audioManager.play('order_created');
+
       // Commit keys immediately to avoid duplicates
       const updatedPrinted = [...printedItems, ...newlyPrintedKeys];
       setPrintedItems(updatedPrinted);

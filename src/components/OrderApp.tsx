@@ -6,6 +6,7 @@ import { ToastContainer, ToastItem, ToastType, playPremiumSound } from './ToastN
 import { triggerThermalPrint } from '../lib/thermalPrinter';
 import { eventBus } from '../services/eventBus';
 import { notificationService } from '../services/notificationService';
+import { audioManager } from '../services/audioManager';
 
 interface OrderAppProps {
   products: Product[];
@@ -54,9 +55,21 @@ export default function OrderApp({
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // Register operational sector context for audio routing
+  // Register operational sector context for audio routing and listen for global toast events
   useEffect(() => {
     notificationService.setSector('order');
+
+    const handleGlobalToast = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.message) {
+        addToast(`${detail.title ? `${detail.title}: ` : ''}${detail.message}`, detail.type || 'info');
+      }
+    };
+
+    window.addEventListener('adegaos_show_toast', handleGlobalToast);
+    return () => {
+      window.removeEventListener('adegaos_show_toast', handleGlobalToast);
+    };
   }, []);
 
   // Item cancellation modal state (Mandatory reason)
@@ -183,8 +196,8 @@ export default function OrderApp({
     });
 
     if (newlyReadyAdded && newlyReadyMessage) {
-      // Plays a distinctive high-pitched double-beep chime
       addToast(newlyReadyMessage, 'ready');
+      audioManager.play('order_ready');
     }
 
     prevReadyItemsMapRef.current = readyItemsMap;
