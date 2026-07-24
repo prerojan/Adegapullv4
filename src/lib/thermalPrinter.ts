@@ -13,6 +13,7 @@ export interface PhysicalPrinterProfile {
   fontHeightDots: number; // 24 dots
   columnsCount: number; // total calculated columns (e.g. 32, 42, 48, 64)
   leftMarginCols: number;
+  leftMarginOffset: number; // ESC/POS physical alignment offset
   rightMarginCols: number;
   usableColumns: number; // columnsCount - leftMarginCols - rightMarginCols
   lineSpacingDots: number; // e.g. 30 dots
@@ -114,9 +115,20 @@ export function getPhysicalPrinterProfile(
     ? Number(hardwareConfig.columnsCount)
     : calculatedColumnsCount;
 
-  const leftMarginCols = hardwareConfig?.leftMarginCols ? Math.max(0, Number(hardwareConfig.leftMarginCols)) : 0;
+  const baseLeftMargin = hardwareConfig?.leftMarginCols ? Math.max(0, Number(hardwareConfig.leftMarginCols)) : 0;
+  const leftMarginOffset = Number(
+    layoutConfig?.leftMarginOffset !== undefined
+      ? layoutConfig.leftMarginOffset
+      : (hardwareConfig?.leftMarginOffset !== undefined ? hardwareConfig.leftMarginOffset : 0)
+  );
+
   const rightMarginCols = hardwareConfig?.rightMarginCols ? Math.max(0, Number(hardwareConfig.rightMarginCols)) : 0;
-  const usableColumns = Math.max(8, columnsCount - leftMarginCols - rightMarginCols);
+  
+  // Total left margin adds base left margin + user physical offset
+  const leftMarginCols = Math.max(0, baseLeftMargin + leftMarginOffset);
+
+  // Column capacity stays strictly computed from physical paper width and font metrics
+  const usableColumns = Math.max(8, columnsCount - baseLeftMargin - rightMarginCols);
 
   return {
     paperSize: paperSize as '58mm' | '80mm',
@@ -129,6 +141,7 @@ export function getPhysicalPrinterProfile(
     fontHeightDots,
     columnsCount,
     leftMarginCols,
+    leftMarginOffset,
     rightMarginCols,
     usableColumns,
     lineSpacingDots: layoutConfig?.lineSpacing || 30,

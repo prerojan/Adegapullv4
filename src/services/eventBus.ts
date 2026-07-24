@@ -41,6 +41,8 @@ export interface EventPayloadMap {
     id: string;
     table?: string;
     reason?: string;
+    origin?: string;
+    sector?: string;
   };
   PRINT_REQUESTED: {
     type: 'sale' | 'comanda' | 'cash_flow' | 'diagnostic' | string;
@@ -63,6 +65,8 @@ export interface EventPayloadMap {
     message: string;
     sound?: 'order_created' | 'order_ready' | 'order_cancelled' | 'print_error' | 'cash_flow' | 'ding';
     data?: any;
+    origin?: string;
+    sector?: string;
   };
   CASH_FLOW_UPDATED: {
     type: string;

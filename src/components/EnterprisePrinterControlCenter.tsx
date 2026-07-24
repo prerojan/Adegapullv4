@@ -115,6 +115,7 @@ export interface EnterprisePrinterConfig {
     italic: boolean;
     inverted: boolean;
     align: 'left' | 'center' | 'right';
+    leftMarginOffset: number; // ESC/POS Physical Alignment Offset
     lineSpacing: number; // dots
     blockSpacing: number; // blank lines
     density: 'low' | 'medium' | 'high' | 'ultra';
@@ -206,6 +207,7 @@ export const DEFAULT_ENTERPRISE_CONFIGS: EnterprisePrinterConfig[] = [
       italic: false,
       inverted: false,
       align: 'left',
+      leftMarginOffset: 0,
       lineSpacing: 30,
       blockSpacing: 1,
       density: 'high',
@@ -345,7 +347,7 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
   });
 
   const [selectedId, setSelectedId] = useState<string>(configs[0]?.id || 'prn_main_caixa');
-  const [activeTab, setActiveTab] = useState<'connection' | 'hardware' | 'layout' | 'document' | 'rules' | 'diagnostics' | 'background_services'>('connection');
+  const [activeTab, setActiveTab] = useState<'connection' | 'hardware' | 'layout' | 'document' | 'rules' | 'diagnostics'>('connection');
 
   // Background Services State
   const [printQueueList, setPrintQueueList] = useState<PrintQueueItem[]>(() => printService.getQueue());
@@ -934,7 +936,6 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
           { id: 'document', label: '4. Matriz Documento', icon: Table },
           { id: 'rules', label: '5. Regras & Setores', icon: Server },
           { id: 'diagnostics', label: '6. Diagnóstico & Spooler', icon: Activity },
-          { id: 'background_services', label: '7. Serviços & Áudio', icon: Zap },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1536,6 +1537,46 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                     })}
                   </div>
                 </div>
+
+                <div className="col-span-1 sm:col-span-2">
+                  <label className="text-[10px] font-bold uppercase text-gray-400">Offset Margem Esquerda (Deslocamento Físico)</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="number"
+                      value={currentConfig.layout.leftMarginOffset || 0}
+                      onChange={(e) => updateCurrentConfig(d => { d.layout.leftMarginOffset = Number(e.target.value) || 0; })}
+                      className={`w-full p-2 rounded-lg border font-mono font-bold text-xs outline-none ${
+                        isDark ? 'bg-[#111] border-gray-800 text-white' : 'bg-gray-50 border-gray-300 text-slate-900'
+                      }`}
+                      placeholder="0"
+                    />
+                    <span className="text-[10px] text-gray-400 font-mono shrink-0">colunas</span>
+                  </div>
+                  <span className="text-[10px] text-gray-500 block mt-1">
+                    Soma/subtrai colunas no ESC/POS para compensar desvio físico do cabeçote (ex: Impressora Oivida).
+                  </span>
+                </div>
+              </div>
+
+              {/* TEST PRINT OFFSET & RULER ACTION BANNER */}
+              <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                isDark ? 'bg-[#18F2A4]/5 border-[#18F2A4]/20' : 'bg-emerald-50 border-emerald-200'
+              }`}>
+                <div>
+                  <h4 className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-[#18F2A4]' : 'text-emerald-800'}`}>
+                    <Printer className="w-4 h-4" /> Validar Ajuste de Margem Físico na Impressora
+                  </h4>
+                  <p className={`text-[11px] mt-0.5 ${isDark ? 'text-gray-300' : 'text-slate-600'}`}>
+                    Dispara uma impressão de diagnóstico com a régua de colunas numerada (1 até o limite) aplicando o offset configurado ({currentConfig.layout.leftMarginOffset || 0} cols).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTriggerRealHardwareTest}
+                  className="px-4 py-2 rounded-lg bg-[#18F2A4] text-black font-bold text-xs hover:bg-[#15d892] cursor-pointer shrink-0 transition-all shadow-sm"
+                >
+                  Testar Impressão de Offset
+                </button>
               </div>
 
               {/* LIVE ESC/POS BYTE HEX INSPECTOR */}
@@ -2198,26 +2239,34 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                 isDark ? 'bg-gradient-to-r from-[#0D1B13] to-[#0A0A0A] border-[#18F2A4]/20' : 'bg-gradient-to-r from-emerald-50 to-white border-emerald-200'
               }`}>
                 <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-xl bg-[#18F2A4]/10 text-[#18F2A4] border border-[#18F2A4]/30 shrink-0">
+                  <div className={`p-3 rounded-xl shrink-0 border ${
+                    isDark ? 'bg-[#18F2A4]/10 text-[#18F2A4] border-[#18F2A4]/30' : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  }`}>
                     <Zap className="w-6 h-6" />
                   </div>
                   <div>
                     <h3 className="font-bold text-sm flex items-center gap-2">
-                      <span>Serviços Desacoplados de Background</span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#18F2A4]/15 text-[#18F2A4] border border-[#18F2A4]/30">Singleton Active</span>
+                      <span className={isDark ? 'text-white' : 'text-slate-900'}>Serviços de Segundo Plano</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                        isDark ? 'bg-[#18F2A4]/15 text-[#18F2A4] border-[#18F2A4]/30' : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      }`}>
+                        Serviço Ativo
+                      </span>
                     </h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Impressão, Áudio Sintetizado e Notificações PWA rodando em segundo plano independente de telas.
+                    <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>
+                      Módulo de Áudio, Fila de Impressão e Notificações do Sistema.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 text-xs">
                   <span className={`px-3 py-1.5 rounded-xl border font-mono font-bold flex items-center gap-1.5 ${
-                    soundSettings.isUnlocked ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                    soundSettings.isUnlocked
+                      ? (isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-100 border-emerald-300 text-emerald-900')
+                      : (isDark ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-amber-100 border-amber-300 text-amber-900')
                   }`}>
                     <Volume2 className="w-4 h-4" />
-                    <span>{soundSettings.isUnlocked ? 'Áudio Unlocked' : 'Áudio Muted/Waiting Tap'}</span>
+                    <span>{soundSettings.isUnlocked ? 'Áudio Habilitado' : 'Aguardando Interação do Usuário'}</span>
                   </span>
                 </div>
               </div>
@@ -2227,15 +2276,23 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                 
                 {/* Audio Synthesizer Panel */}
                 <div className={`p-4 rounded-2xl border flex flex-col gap-3.5 ${
-                  isDark ? 'bg-[#111111] border-gray-800' : 'bg-white border-gray-200'
+                  isDark ? 'bg-[#111111] border-gray-800' : 'bg-white border-gray-200 shadow-sm'
                 }`}>
-                  <div className="flex items-center justify-between border-b pb-2.5 border-gray-800/60">
+                  <div className={`flex items-center justify-between border-b pb-2.5 ${
+                    isDark ? 'border-gray-800' : 'border-gray-200'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      <Volume2 className="w-4 h-4 text-[#18F2A4]" />
-                      <h4 className="font-bold text-xs uppercase tracking-wider">1. Sintetizador de Áudio (Web Audio API)</h4>
+                      <Volume2 className={`w-4 h-4 ${isDark ? 'text-[#18F2A4]' : 'text-emerald-700'}`} />
+                      <h4 className={`font-bold text-xs uppercase tracking-wider ${
+                        isDark ? 'text-white' : 'text-slate-900'
+                      }`}>
+                        1. Configuração do Sintetizador de Áudio
+                      </h4>
                     </div>
                     <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold">
-                      <span>{soundSettings.soundEnabled ? 'Ativado' : 'Mutado'}</span>
+                      <span className={isDark ? 'text-gray-300' : 'text-slate-700'}>
+                        {soundSettings.soundEnabled ? 'Ativado' : 'Mutado'}
+                      </span>
                       <input
                         type="checkbox"
                         checked={soundSettings.soundEnabled}
@@ -2248,9 +2305,31 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                     </label>
                   </div>
 
-                  {/* Volume Control Slider */}
-                  <div className="flex items-center gap-3 bg-gray-900/40 p-3 rounded-xl border border-gray-800">
-                    <span className="text-xs font-bold text-gray-400 min-w-16">Volume:</span>
+                  {/* Standard Volume Control Mixer */}
+                  <div className={`flex items-center gap-3 p-3 rounded-xl border ${
+                    isDark ? 'bg-gray-900/60 border-gray-800' : 'bg-gray-50 border-gray-300'
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newEnabled = !soundSettings.soundEnabled;
+                        audioManager.saveSettings(soundSettings.volume, newEnabled);
+                        setSoundSettings(audioManager.getSettings());
+                      }}
+                      className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                        soundSettings.soundEnabled
+                          ? (isDark ? 'bg-[#18F2A4]/10 border-[#18F2A4]/30 text-[#18F2A4]' : 'bg-emerald-100 border-emerald-300 text-emerald-800')
+                          : (isDark ? 'bg-gray-800 border-gray-700 text-gray-500' : 'bg-gray-200 border-gray-300 text-gray-600')
+                      }`}
+                      title={soundSettings.soundEnabled ? 'Mutar Áudio' : 'Ativar Áudio'}
+                    >
+                      {soundSettings.soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                    </button>
+
+                    <span className={`text-xs font-bold min-w-14 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                      Volume:
+                    </span>
+
                     <input
                       type="range"
                       min="0"
@@ -2262,30 +2341,61 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                         audioManager.saveSettings(val, soundSettings.soundEnabled);
                         setSoundSettings(audioManager.getSettings());
                       }}
-                      className="w-full accent-[#18F2A4] cursor-pointer"
+                      className="w-full accent-[#18F2A4] cursor-pointer h-2 rounded-lg bg-gray-300 dark:bg-gray-700"
                     />
-                    <span className="text-xs font-mono font-bold text-[#18F2A4] min-w-10 text-right">
+
+                    <span className={`text-xs font-mono font-bold min-w-10 text-right ${
+                      isDark ? 'text-[#18F2A4]' : 'text-emerald-800'
+                    }`}>
                       {Math.round(soundSettings.volume * 100)}%
                     </span>
                   </div>
 
-                  {/* Audio Test Tones Grid */}
+                  {/* Audio Test Tones Grid - Strictly NO emojis */}
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Testar Timbres Operacionais:</span>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                      isDark ? 'text-gray-400' : 'text-slate-600'
+                    }`}>
+                      Testar Timbres Operacionais:
+                    </span>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {[
-                        { sound: 'order_created', label: '🔔 Novo Pedido', color: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
-                        { sound: 'order_ready', label: '🎉 Pedido Pronto', color: 'bg-blue-500/10 text-blue-300 border-blue-500/20' },
-                        { sound: 'order_cancelled', label: '⚠️ Cancelado', color: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
-                        { sound: 'cash_flow', label: '💰 Caixa / Venda', color: 'bg-purple-500/10 text-purple-300 border-purple-500/20' },
-                        { sound: 'print_error', label: '🚨 Erro Impressão', color: 'bg-red-500/10 text-red-300 border-red-500/20' },
-                        { sound: 'ding', label: '🔔 Sinal Padrão', color: 'bg-gray-500/10 text-gray-300 border-gray-500/20' }
+                        {
+                          sound: 'order_created',
+                          label: 'Novo Pedido',
+                          color: isDark ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
+                        },
+                        {
+                          sound: 'order_ready',
+                          label: 'Pedido Pronto',
+                          color: isDark ? 'bg-blue-500/10 text-blue-300 border-blue-500/20' : 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100'
+                        },
+                        {
+                          sound: 'order_cancelled',
+                          label: 'Pedido Cancelado',
+                          color: isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                        },
+                        {
+                          sound: 'cash_flow',
+                          label: 'Venda no Caixa',
+                          color: isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/20' : 'bg-purple-50 text-purple-900 border-purple-300 hover:bg-purple-100'
+                        },
+                        {
+                          sound: 'print_error',
+                          label: 'Erro de Impressão',
+                          color: isDark ? 'bg-red-500/10 text-red-300 border-red-500/20' : 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100'
+                        },
+                        {
+                          sound: 'ding',
+                          label: 'Sinal Padrão',
+                          color: isDark ? 'bg-gray-500/10 text-gray-300 border-gray-500/20' : 'bg-gray-100 text-slate-800 border-gray-300 hover:bg-gray-200'
+                        }
                       ].map(item => (
                         <button
                           key={item.sound}
                           type="button"
                           onClick={() => audioManager.play(item.sound as SoundType)}
-                          className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer hover:scale-[1.02] active:scale-95 flex items-center justify-center ${item.color}`}
+                          className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer hover:scale-[1.02] active:scale-95 flex items-center justify-center ${item.color}`}
                         >
                           {item.label}
                         </button>
@@ -2296,22 +2406,30 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
 
                 {/* PWA & System Notifications Panel */}
                 <div className={`p-4 rounded-2xl border flex flex-col gap-3.5 ${
-                  isDark ? 'bg-[#111111] border-gray-800' : 'bg-white border-gray-200'
+                  isDark ? 'bg-[#111111] border-gray-800' : 'bg-white border-gray-200 shadow-sm'
                 }`}>
-                  <div className="flex items-center justify-between border-b pb-2.5 border-gray-800/60">
+                  <div className={`flex items-center justify-between border-b pb-2.5 ${
+                    isDark ? 'border-gray-800' : 'border-gray-200'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      <Bell className="w-4 h-4 text-[#18F2A4]" />
-                      <h4 className="font-bold text-xs uppercase tracking-wider">2. Notificações PWA / Push em Segundo Plano</h4>
+                      <Bell className={`w-4 h-4 ${isDark ? 'text-[#18F2A4]' : 'text-emerald-700'}`} />
+                      <h4 className={`font-bold text-xs uppercase tracking-wider ${
+                        isDark ? 'text-white' : 'text-slate-900'
+                      }`}>
+                        2. Notificações do Sistema e PWA
+                      </h4>
                     </div>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-                      pwaPermission === 'granted' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                      pwaPermission === 'granted'
+                        ? (isDark ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-emerald-100 text-emerald-800 border border-emerald-300')
+                        : (isDark ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'bg-amber-100 text-amber-800 border border-amber-300')
                     }`}>
-                      {pwaPermission}
+                      {pwaPermission === 'granted' ? 'Concedido' : pwaPermission === 'denied' ? 'Negado' : 'Pendente'}
                     </span>
                   </div>
 
-                  <p className="text-xs text-gray-400 leading-relaxed">
-                    Permite enviar alertas nativos do SO/Android mesmo quando o navegador ou app estiver minimizado.
+                  <p className={`text-xs leading-relaxed ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>
+                    Notificações nativas do sistema operacional ativadas para alertas prioritários.
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-2 mt-auto pt-2">
@@ -2324,7 +2442,7 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                       }}
                       className={`flex-1 py-2.5 px-3 rounded-xl border font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 ${
                         pwaPermission === 'granted'
-                          ? 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700'
+                          ? (isDark ? 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700' : 'bg-gray-200 text-slate-800 border-gray-300 hover:bg-gray-300')
                           : 'bg-[#18F2A4] text-black border-[#18F2A4] hover:bg-[#12d58f]'
                       }`}
                     >
@@ -2335,17 +2453,19 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                     <button
                       type="button"
                       onClick={async () => {
-                        const sent = await pwaService.sendNotification('FluxOS Teste em Segundo Plano', {
-                          body: 'Esta é uma notificação nativa de teste disparada pelo Service Worker!',
+                        const sent = await pwaService.sendNotification('FluxOS Teste de Notificação', {
+                          body: 'Alerta de teste do sistema operacional.',
                           tag: `test_${Date.now()}`
                         });
                         if (!sent && pwaPermission !== 'granted') {
                           alert('Solicite e permita as Notificações do Navegador primeiro.');
                         }
                       }}
-                      className="py-2.5 px-4 rounded-xl border border-gray-700 bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                      className={`py-2.5 px-4 rounded-xl border font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 ${
+                        isDark ? 'border-gray-700 bg-gray-800 hover:bg-gray-700 text-white' : 'border-gray-300 bg-gray-100 hover:bg-gray-200 text-slate-800'
+                      }`}
                     >
-                      <Zap className="w-3.5 h-3.5 text-[#18F2A4]" />
+                      <Zap className={`w-3.5 h-3.5 ${isDark ? 'text-[#18F2A4]' : 'text-emerald-700'}`} />
                       <span>Testar Alerta PWA</span>
                     </button>
                   </div>

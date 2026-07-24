@@ -4,6 +4,7 @@ import { TableComandaState, Product, CashierUser } from '../types';
 import { ToastContainer, ToastItem, ToastType, playPremiumSound } from './ToastNotification';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
 import { eventBus } from '../services/eventBus';
+import { notificationService } from '../services/notificationService';
 import { shouldCategoryGoToProduction, getCategoryProductionSector } from '../lib/productionCategories';
 import ProductionCategoryConfigManager from './ProductionCategoryConfigManager';
 
@@ -43,6 +44,20 @@ export default function ProductionPanel({
   const [searchFilter, setSearchFilter] = useState('');
   const [beepSimulated, setBeepSimulated] = useState(false);
   const [showCategoryConfigModal, setShowCategoryConfigModal] = useState(false);
+
+  // Cancellation modal state (Mandatory reason)
+  const [cancelModalData, setCancelModalData] = useState<{
+    tableId: string;
+    itemIndex: number;
+    itemName: string;
+    tableStr: string;
+  } | null>(null);
+  const [cancelReasonInput, setCancelReasonInput] = useState('');
+
+  // Register operational sector context for audio routing
+  useEffect(() => {
+    notificationService.setSector('producao');
+  }, []);
 
   // Toasts local state
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -316,7 +331,8 @@ export default function ProductionPanel({
   const handleUpdateItemStatus = (
     tableId: string,
     itemIndex: number,
-    newStatus: 'pendente' | 'recebido' | 'preparo' | 'pronto' | 'entregue' | 'cancelado'
+    newStatus: 'pendente' | 'recebido' | 'preparo' | 'pronto' | 'entregue' | 'cancelado',
+    customReason?: string
   ) => {
     const table = tablesComandas.find(t => t.id === tableId);
     if (!table || !table.items) return;
@@ -325,9 +341,12 @@ export default function ProductionPanel({
     const currentItem = updatedItems[itemIndex];
     if (!currentItem) return;
 
+    const reason = customReason || 'Cancelado na Produção';
+
     updatedItems[itemIndex] = {
       ...currentItem,
       status: newStatus,
+      ...(newStatus === 'cancelado' ? { cancelReason: reason } : {}),
       statusHistory: [
         ...(currentItem.statusHistory || []),
         {
@@ -354,7 +373,8 @@ export default function ProductionPanel({
       eventBus.publish('ORDER_CANCELLED', {
         id: tableId,
         table: tableStr,
-        reason: 'Cancelado na Produção'
+        reason,
+        origin: 'producao'
       });
     } else {
       eventBus.publish('ORDER_UPDATED', {
@@ -682,9 +702,15 @@ export default function ProductionPanel({
                           {/* Quick cancel option for items in mistake */}
                           <button
                             onClick={() => {
-                              (window as any).confirmModal('Deseja cancelar a produção deste item? O estoque voltará ao normal.', () => {
-                                handleUpdateItemStatus(item.tableId, item.itemIndex, 'cancelado');
+                              const table = tablesComandas.find(t => t.id === item.tableId);
+                              const tableStr = table ? `${table.type === 'mesa' ? 'Mesa' : 'Comanda'} ${table.number}` : item.tableName;
+                              setCancelModalData({
+                                tableId: item.tableId,
+                                itemIndex: item.itemIndex,
+                                itemName: item.productName,
+                                tableStr
                               });
+                              setCancelReasonInput('');
                             }}
                             className={`p-1.5 rounded text-[10px] font-bold border cursor-pointer transition-all ${
                               theme === 'dark'
@@ -697,11 +723,18 @@ export default function ProductionPanel({
                           </button>
                         </>
                       ) : (
-                        <div className="flex-1 flex justify-between items-center text-[10px] text-gray-500">
-                          <span>Status finalizado:</span>
-                          <span className={`font-mono font-bold uppercase ${item.status === 'entregue' ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {item.status === 'entregue' ? 'Entregue' : 'Cancelado'}
-                          </span>
+                        <div className="flex-1 flex flex-col gap-1 text-[10px] text-gray-500">
+                          <div className="flex justify-between items-center">
+                            <span>Status finalizado:</span>
+                            <span className={`font-mono font-bold uppercase ${item.status === 'entregue' ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {item.status === 'entregue' ? 'Entregue' : 'Cancelado'}
+                            </span>
+                          </div>
+                          {item.status === 'cancelado' && (item as any).cancelReason && (
+                            <span className="text-[10px] font-medium text-red-400 bg-red-500/10 p-1 rounded border border-red-500/20">
+                              Motivo: {(item as any).cancelReason}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -733,6 +766,99 @@ export default function ProductionPanel({
               <X className="w-5 h-5" />
             </button>
             <ProductionCategoryConfigManager theme={theme} products={products} onClose={() => setShowCategoryConfigModal(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Mandatory Cancel Item Reason Modal */}
+      {cancelModalData && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className={`w-full max-w-md rounded-2xl p-6 border shadow-2xl flex flex-col gap-4 ${
+            theme === 'dark' ? 'bg-[#111111] border-gray-800 text-white' : 'bg-white border-gray-200 text-slate-900'
+          }`}>
+            <div className="flex justify-between items-center border-b pb-3 border-gray-700/50">
+              <h3 className="font-bold text-sm text-red-500 flex items-center gap-2">
+                <span>Cancelar Item na Produção</span>
+              </h3>
+              <button
+                onClick={() => setCancelModalData(null)}
+                className="text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs flex flex-col gap-1">
+              <span className="font-bold">{cancelModalData.itemName}</span>
+              <span className="text-gray-400">{cancelModalData.tableStr}</span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                Motivo do Cancelamento <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Ex: Item em falta no estoque, erro de digitação..."
+                value={cancelReasonInput}
+                onChange={(e) => setCancelReasonInput(e.target.value)}
+                className={`w-full p-2.5 rounded-xl border text-xs font-medium outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-900 border-gray-800 text-white focus:border-red-500'
+                    : 'bg-gray-50 border-gray-300 text-slate-900 focus:border-red-500'
+                }`}
+              />
+
+              {/* Quick Presets */}
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {['Sem Estoque', 'Cliente Desistiu', 'Erro no Pedido', 'Atraso na Preparação'].map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setCancelReasonInput(preset)}
+                    className={`text-[10px] font-bold px-2 py-1 rounded-lg border cursor-pointer transition-all ${
+                      cancelReasonInput === preset
+                        ? 'bg-red-500 text-white border-red-500'
+                        : theme === 'dark'
+                          ? 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700'
+                          : 'bg-gray-100 text-slate-700 border-gray-300 hover:bg-gray-200'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 justify-end pt-2 border-t border-gray-700/50">
+              <button
+                type="button"
+                onClick={() => setCancelModalData(null)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                  theme === 'dark' ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-200 text-slate-700 hover:bg-gray-300'
+                }`}
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={!cancelReasonInput.trim()}
+                onClick={() => {
+                  if (!cancelReasonInput.trim()) return;
+                  handleUpdateItemStatus(
+                    cancelModalData.tableId,
+                    cancelModalData.itemIndex,
+                    'cancelado',
+                    cancelReasonInput.trim()
+                  );
+                  setCancelModalData(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all cursor-pointer"
+              >
+                Confirmar Cancelamento
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ import ProductCard from './ProductCard';
 import { ToastContainer, ToastItem, ToastType, playPremiumSound } from './ToastNotification';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
 import { eventBus } from '../services/eventBus';
+import { notificationService } from '../services/notificationService';
 
 interface OrderAppProps {
   products: Product[];
@@ -52,6 +53,18 @@ export default function OrderApp({
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
+
+  // Register operational sector context for audio routing
+  useEffect(() => {
+    notificationService.setSector('order');
+  }, []);
+
+  // Item cancellation modal state (Mandatory reason)
+  const [cancelModalData, setCancelModalData] = useState<{
+    productId: string;
+    productName: string;
+  } | null>(null);
+  const [cancelReasonInput, setCancelReasonInput] = useState('');
 
   // Login status
   const [authorizedUser, setAuthorizedUser] = useState<CashierUser | null>(currentUser);
@@ -324,7 +337,8 @@ export default function OrderApp({
         price: c.product.sellPrice
       })),
       sector: 'cozinha',
-      clientName: authorizedUser?.name || 'Garçom'
+      clientName: authorizedUser?.name || 'Garçom',
+      origin: 'order'
     });
 
     setOrderCart([]);
@@ -381,20 +395,51 @@ export default function OrderApp({
     onUpdateTableItems(selectedTableId, updatedItems);
   };
 
-  // Remove confirmed consumed item completely
+  // Remove confirmed consumed item with mandatory reason modal
   const handleRemoveConsumedItem = (productId: string) => {
     if (!selectedTableId || !activeTable) return;
-
-    (window as any).confirmModal("Deseja cancelar e remover este item da mesa?", () => {
-      const updatedItems = [...(activeTable.items || [])];
-      const itemIndex = updatedItems.findIndex(i => i.productId === productId);
-      if (itemIndex !== -1) {
-        const item = updatedItems[itemIndex];
-        onUpdateStock(productId, -item.quantity); // restore stock
-        updatedItems.splice(itemIndex, 1);
-        onUpdateTableItems(selectedTableId, updatedItems);
-      }
+    const prod = products.find(p => p.id === productId);
+    setCancelModalData({
+      productId,
+      productName: prod ? prod.name : 'Item'
     });
+    setCancelReasonInput('');
+  };
+
+  const handleConfirmCancelItem = () => {
+    if (!selectedTableId || !activeTable || !cancelModalData || !cancelReasonInput.trim()) return;
+
+    const productId = cancelModalData.productId;
+    const reason = cancelReasonInput.trim();
+    const updatedItems = [...(activeTable.items || [])];
+    const itemIndex = updatedItems.findIndex(i => i.productId === productId);
+
+    if (itemIndex !== -1) {
+      const item = updatedItems[itemIndex];
+      onUpdateStock(productId, -item.quantity); // restore stock
+
+      // Mark item status as cancelado with reason
+      updatedItems[itemIndex] = {
+        ...item,
+        status: 'cancelado',
+        cancelReason: reason
+      };
+
+      onUpdateTableItems(selectedTableId, updatedItems);
+
+      const tableStr = `${activeTable.type === 'mesa' ? 'Mesa' : 'Comanda'} ${activeTable.number}`;
+
+      eventBus.publish('ORDER_CANCELLED', {
+        id: selectedTableId,
+        table: tableStr,
+        reason,
+        origin: 'order'
+      });
+
+      addToast(`Item cancelado. Motivo: ${reason}`, 'warning');
+    }
+
+    setCancelModalData(null);
   };
 
   // Process checkout payments and wipe comanda table back to free
@@ -1671,6 +1716,89 @@ export default function OrderApp({
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Mandatory Cancel Item Reason Modal */}
+      {cancelModalData && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className={`w-full max-w-md rounded-2xl p-6 border shadow-2xl flex flex-col gap-4 ${
+            theme === 'dark' ? 'bg-[#111111] border-gray-800 text-white' : 'bg-white border-gray-200 text-slate-900'
+          }`}>
+            <div className="flex justify-between items-center border-b pb-3 border-gray-700/50">
+              <h3 className="font-bold text-sm text-red-500 flex items-center gap-2">
+                <span>Cancelar Item na Mesa/Comanda</span>
+              </h3>
+              <button
+                onClick={() => setCancelModalData(null)}
+                className="text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs flex flex-col gap-1">
+              <span className="font-bold text-sm">{cancelModalData.productName}</span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                Motivo do Cancelamento <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Ex: Desistência do cliente, pedido duplicado..."
+                value={cancelReasonInput}
+                onChange={(e) => setCancelReasonInput(e.target.value)}
+                className={`w-full p-2.5 rounded-xl border text-xs font-medium outline-none transition-all ${
+                  theme === 'dark'
+                    ? 'bg-gray-900 border-gray-800 text-white focus:border-red-500'
+                    : 'bg-gray-50 border-gray-300 text-slate-900 focus:border-red-500'
+                }`}
+              />
+
+              {/* Quick Presets */}
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {['Desistência do Cliente', 'Pedido Duplicado', 'Demora na Entrega', 'Erro do Garçom'].map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setCancelReasonInput(preset)}
+                    className={`text-[10px] font-bold px-2 py-1 rounded-lg border cursor-pointer transition-all ${
+                      cancelReasonInput === preset
+                        ? 'bg-red-500 text-white border-red-500'
+                        : theme === 'dark'
+                          ? 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700'
+                          : 'bg-gray-100 text-slate-700 border-gray-300 hover:bg-gray-200'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 justify-end pt-2 border-t border-gray-700/50">
+              <button
+                type="button"
+                onClick={() => setCancelModalData(null)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                  theme === 'dark' ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-200 text-slate-700 hover:bg-gray-300'
+                }`}
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={!cancelReasonInput.trim()}
+                onClick={handleConfirmCancelItem}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all cursor-pointer"
+              >
+                Confirmar Cancelamento
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@ import { Settings, Users, Store, ShieldAlert, Key, Plus, Save, ToggleLeft, Toggl
 import { CashierUser, Product } from '../types';
 import { PrinterDevice, getSavedPrinters, savePrinters, triggerThermalPrint } from '../lib/thermalPrinter';
 import EnterprisePrinterControlCenter from './EnterprisePrinterControlCenter';
+import EnterpriseServicesAudioControl from './EnterpriseServicesAudioControl';
 
 interface ManagerSettingsProps {
   usersList: CashierUser[];
@@ -26,7 +27,7 @@ export default function ManagerSettings({
   products
 }: ManagerSettingsProps) {
   // Topic Tab Selector State
-  type SETTINGS_TOPIC = 'general' | 'printers' | 'staff' | 'terminals';
+  type SETTINGS_TOPIC = 'general' | 'printers' | 'services' | 'staff' | 'terminals';
   const [activeTopic, setActiveTopic] = useState<SETTINGS_TOPIC>('general');
 
   // Corporate states
@@ -379,6 +380,19 @@ export default function ManagerSettings({
 
         <button
           type="button"
+          onClick={() => setActiveTopic('services')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeTopic === 'services'
+              ? (theme === 'dark' ? 'bg-[#18F2A4] text-black shadow-md' : 'bg-[#10B981] text-white shadow-md')
+              : 'text-gray-400 hover:text-white hover:bg-gray-500/10'
+          }`}
+        >
+          <Zap className="w-4 h-4" />
+          <span>Serviços & Áudio</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTopic('staff')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
             activeTopic === 'staff'
@@ -520,6 +534,15 @@ export default function ManagerSettings({
       {activeTopic === 'printers' && (
         <div className="flex flex-col gap-5 animate-fade-in">
           <EnterprisePrinterControlCenter theme={theme} />
+        </div>
+      )}
+
+      {/* =========================================================
+          TOPIC 3: SERVIÇOS EM SEGUNDO PLANO & ÁUDIO OPERACIONAL
+          ========================================================= */}
+      {activeTopic === 'services' && (
+        <div className="flex flex-col gap-5 animate-fade-in">
+          <EnterpriseServicesAudioControl theme={theme} />
         </div>
       )}
 

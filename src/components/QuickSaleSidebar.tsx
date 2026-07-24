@@ -4,6 +4,7 @@ import { Product, Sale, FinancialTransaction, CashierUser, Shift } from '../type
 import { playPremiumSound } from './ToastNotification';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
 import { eventBus } from '../services/eventBus';
+import { notificationService } from '../services/notificationService';
 
 const alert = (window as any).alert;
 
@@ -45,7 +46,12 @@ export default function QuickSaleSidebar({
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [cashReceived, setCashReceived] = useState<string>('');
 
-  // Auto-respond to scanned barcode triggers
+  // Set operational sector context for audio
+  useEffect(() => {
+    if (isOpen) {
+      notificationService.setSector('caixa');
+    }
+  }, [isOpen]);
   useEffect(() => {
     if (scannedBarcodeTrigger?.barcode && isOpen) {
       const prod = products.find(p => p.barcode === scannedBarcodeTrigger.barcode || p.id === scannedBarcodeTrigger.barcode);
