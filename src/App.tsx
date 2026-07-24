@@ -1106,14 +1106,14 @@ export default function App() {
 
   const menuItems = [
     { id: 'dashboard', name: 'Painel Executivo', icon: BarChart3 },
-    { id: 'produtos', name: 'Cadastro de Produtos', icon: Layers },
-    { id: 'estoque', name: 'Estoque Físico', icon: Package },
-    { id: 'vendas', name: 'Auditoria de Vendas', icon: Receipt },
-    { id: 'compras', name: 'Compras / NF-e', icon: Truck },
-    { id: 'producao', name: 'Fila de Produção', icon: ChefHat },
     { id: 'salao', name: 'Lançamento (Order)', icon: Tablet },
-    { id: 'fornecedores', name: 'Fornecedores', icon: Users },
+    { id: 'producao', name: 'Fila de Produção', icon: ChefHat },
+    { id: 'vendas', name: 'Auditoria de Vendas', icon: Receipt },
+    { id: 'estoque', name: 'Estoque Físico', icon: Package },
+    { id: 'produtos', name: 'Cadastro de Produtos', icon: Layers },
     { id: 'financeiro', name: 'Financeiro / DRE', icon: Landmark },
+    { id: 'compras', name: 'Compras / NF-e', icon: Truck },
+    { id: 'fornecedores', name: 'Fornecedores', icon: Users },
     { id: 'relatorios', name: 'Relatórios & BI', icon: FileDown },
     { id: 'importador', name: 'Importação em Lote', icon: FileSpreadsheet },
     { id: 'configuracoes', name: 'Configurações', icon: Settings },
@@ -1176,7 +1176,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-all duration-200 ${themeClasses}`}>
+    <div className={`h-screen max-h-screen overflow-hidden flex flex-col font-sans transition-all duration-200 ${themeClasses}`}>
       
       {/* Mobile top bar for Manager mode */}
       {activeProductView === 'manager' && (
@@ -1199,7 +1199,7 @@ export default function App() {
       )}
 
       {/* Main Sandbox Area */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative h-full">
         
         {activeProductView === 'manager' ? (
           /* =====================================
@@ -1216,9 +1216,9 @@ export default function App() {
             )}
 
             {/* Sidebar navigation */}
-            <aside className={`fixed inset-y-0 left-0 z-40 w-60 transform ${
+            <aside className={`fixed inset-y-0 left-0 z-40 w-60 h-screen max-h-screen transform ${
               isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-            } md:relative md:translate-x-0 transition-transform duration-300 ease-in-out border-r flex flex-col justify-between shrink-0 h-full ${
+            } md:sticky md:top-0 md:translate-x-0 transition-transform duration-300 ease-in-out border-r flex flex-col justify-between shrink-0 ${
               theme === 'dark' ? 'bg-[#080808] border-[#161616]' : 'bg-white border-slate-200 shadow-xs'
             }`}>
               <div className="flex flex-col gap-1.5 overflow-y-auto flex-1">

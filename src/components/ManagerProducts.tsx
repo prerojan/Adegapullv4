@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, Filter, Edit, Copy, Archive, Check, X, Tag, FileSpreadsheet, Percent, Trash2, ShieldCheck, SlidersHorizontal, Edit2, Image, Sparkles } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Copy, Archive, Check, X, Tag, FileSpreadsheet, Percent, Trash2, ShieldCheck, SlidersHorizontal, Edit2, Image, Sparkles, Globe, ExternalLink } from 'lucide-react';
 import { Product, Supplier, RecipeItem } from '../types';
 
 const REFERENCE_BEVERAGE_IMAGES = [
@@ -1039,8 +1039,22 @@ export default function ManagerProducts({
                         }`}
                       >
                         <Search className="w-3 h-3" />
-                        <span>Buscar Foto de Referência</span>
+                        <span>Galeria de Referências</span>
                       </button>
+
+                      <a
+                        href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(name || category || 'bebida produto')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`text-[10px] font-bold px-2.5 py-1.5 rounded border transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                          theme === 'dark' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20' : 'bg-blue-50 border-blue-300 text-blue-800 hover:bg-blue-100'
+                        }`}
+                        title="Abrir busca direta no Google Imagens sem restrições de licença"
+                      >
+                        <Globe className="w-3 h-3" />
+                        <span>Buscar no Google Imagens</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
 
                       {image && image.startsWith('data:image') && (
                         <span className="text-[9px] text-emerald-500 font-bold flex items-center gap-0.5">
@@ -1311,8 +1325,8 @@ export default function ManagerProducts({
               theme === 'dark' ? 'border-[#1C1C1C]' : 'border-gray-200'
             }`}>
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#18F2A4]" />
-                <h3 className="font-bold text-sm tracking-tight">Galeria de Fotos de Referência (Licença Livre)</h3>
+                <Globe className="w-4 h-4 text-blue-400" />
+                <h3 className="font-bold text-sm tracking-tight">Galeria & Busca Direta no Google Imagens</h3>
               </div>
               <button onClick={() => setShowImageSearchModal(false)} className="text-gray-400 hover:text-white p-1 cursor-pointer">
                 <X className="w-4 h-4" />
@@ -1320,11 +1334,35 @@ export default function ManagerProducts({
             </div>
 
             <div className="p-4 flex flex-col gap-3 overflow-y-auto flex-1">
+              {/* Google Images Banner */}
+              <div className={`p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                theme === 'dark' ? 'bg-blue-950/30 border-blue-800/40 text-blue-200' : 'bg-blue-50 border-blue-200 text-blue-900'
+              }`}>
+                <div className="flex flex-col text-xs gap-0.5">
+                  <span className="font-extrabold flex items-center gap-1.5 text-blue-400">
+                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                    Busca Direta sem Filtros de Licença (Uso Visual do Sistema)
+                  </span>
+                  <p className="text-[10px] text-gray-400">
+                    No Google Imagens: clique na foto desejada com o botão direito &rarr; <strong>"Copiar endereço da imagem"</strong> e cole no campo de URL do produto.
+                  </p>
+                </div>
+                <a
+                  href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(refImageSearchTerm || name || 'bebida produto')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-black text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  <span>Abrir Google Imagens</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Busque por cerveja, heineken, whisky, refrigerante, gelo..."
+                  placeholder="Filtrar galeria por cerveja, heineken, whisky, refrigerante, gelo..."
                   value={refImageSearchTerm}
                   onChange={(e) => setRefImageSearchTerm(e.target.value)}
                   className={`w-full pl-9 pr-3 py-2 text-xs rounded-xl border outline-none ${

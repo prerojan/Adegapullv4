@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, DollarSign, Wallet, FileText, CheckCircle, Percent } from 'lucide-react';
+import { X, Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, DollarSign, Wallet, FileText, CheckCircle, Percent, Package } from 'lucide-react';
 import { Product, Sale, FinancialTransaction, CashierUser, Shift } from '../types';
 import { playPremiumSound } from './ToastNotification';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
@@ -321,17 +321,35 @@ export default function QuickSaleSidebar({
                 {cart.map(item => (
                   <div 
                     key={item.product.id}
-                    className={`p-3 rounded-xl border flex justify-between items-center ${
+                    className={`p-2.5 rounded-xl border flex justify-between items-center gap-2 ${
                       isDark ? 'bg-black/30 border-[#1C1C1C]' : 'bg-white border-gray-100'
                     }`}
                   >
-                    <div className="flex-1 min-w-0 pr-3">
-                      <p className={`text-xs font-semibold truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                        {item.product.name}
-                      </p>
-                      <span className={`text-[10px] font-mono font-bold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                        R$ {item.product.sellPrice.toFixed(2)} / un
-                      </span>
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1">
+                      {/* Product Thumbnail */}
+                      <div className={`w-9 h-9 rounded-lg overflow-hidden shrink-0 border flex items-center justify-center ${
+                        isDark ? 'bg-black/50 border-gray-800' : 'bg-gray-100 border-gray-200'
+                      }`}>
+                        {item.product.image ? (
+                          <img 
+                            src={item.product.image} 
+                            alt={item.product.name} 
+                            referrerPolicy="no-referrer" 
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <Package className="w-4 h-4 text-gray-400" />
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-semibold truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`} title={item.product.name}>
+                          {item.product.name}
+                        </p>
+                        <span className={`text-[10px] font-mono font-bold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                          R$ {item.product.sellPrice.toFixed(2)} / un
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-3">
