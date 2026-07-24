@@ -24,7 +24,7 @@ export const DEFAULT_PRODUCTION_CATEGORY_RULES: ProductionCategoryRule[] = [
   { id: 'cat_p11', category: 'Tabacaria', sendToProduction: false, targetSector: 'bar', autoPrintTicket: false, notes: 'Venda direta no caixa (sem preparo)' },
   { id: 'cat_p12', category: 'Gelo', sendToProduction: true, targetSector: 'bar', autoPrintTicket: true, notes: 'Retirada no Bar' },
   { id: 'cat_p13', category: 'Combos', sendToProduction: true, targetSector: 'bar', autoPrintTicket: true, notes: 'Montagem Bar' },
-  { id: 'cat_p14', category: 'Outros', sendToProduction: false, targetSector: 'geral', autoPrintTicket: false, notes: 'Não vai para a tela de produção' },
+  { id: 'cat_p14', category: 'Outros', sendToProduction: false, targetSector: 'geral', autoPrintTicket: false, notes: 'Venda direta no caixa (sem preparo)' },
 ];
 
 export function getProductionCategoryRules(): ProductionCategoryRule[] {

@@ -192,8 +192,8 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
               <ChefHat className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold tracking-tight">Categorias de Itens Enviados para a Produção</h3>
-              <p className="text-xs text-gray-400 font-medium">Defina quais categorias VÃO e quais NÃO VÃO para a tela de comandas e impressoras de produção (Cozinha/Bar).</p>
+              <h3 className="text-base font-extrabold tracking-tight">Diretrizes de Produção por Categoria</h3>
+              <p className="text-xs text-gray-400 font-medium">Defina o roteamento automático de produtos para as centrais de preparo e impressoras de comandas.</p>
             </div>
           </div>
         </div>
@@ -205,10 +205,10 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
             className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 cursor-pointer transition-all ${
               theme === 'dark' ? 'bg-[#111] border-gray-800 text-gray-400 hover:text-white' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'
             }`}
-            title="Restaurar padrões de fábrica"
+            title="Restaurar configurações padrão do sistema"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Restaurar Padrão</span>
+            <span>Restaurar Padrões</span>
           </button>
 
           <button
@@ -219,7 +219,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
             }`}
           >
             <Plus className="w-4 h-4" />
-            <span>Adicionar Categoria</span>
+            <span>Nova Categoria</span>
           </button>
 
           <button
@@ -231,7 +231,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
             title="Salvar alterações e fechar a tela de configuração"
           >
             <Save className="w-4 h-4" />
-            <span>Salvar e Sair</span>
+            <span>Salvar e Fechar</span>
           </button>
         </div>
       </div>
@@ -254,7 +254,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
               <Check className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400 block">Vão para Produção</span>
+              <span className="text-[10px] uppercase font-bold text-gray-400 block">Direcionadas à Produção</span>
               <span className="text-base font-black text-emerald-400">{vaoCount} categorias</span>
             </div>
           </div>
@@ -264,12 +264,12 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
           theme === 'dark' ? 'bg-[#111] border-[#1C1C1C]' : 'bg-gray-50 border-gray-200'
         }`}>
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-red-500/10 text-red-400">
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
               <X className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400 block">NÃO Vão para Produção</span>
-              <span className="text-base font-black text-red-400">{naoVaoCount} categorias</span>
+              <span className="text-[10px] uppercase font-bold text-gray-400 block">Venda Direta no PDV</span>
+              <span className="text-base font-black text-amber-400">{naoVaoCount} categorias</span>
             </div>
           </div>
         </div>
@@ -282,7 +282,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
               <Layers className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400 block">Total Mapeadas</span>
+              <span className="text-[10px] uppercase font-bold text-gray-400 block">Categorias Cadastradas</span>
               <span className="text-base font-black text-sky-400">{rules.length} categorias</span>
             </div>
           </div>
@@ -315,18 +315,18 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                 : 'text-gray-400 hover:text-white'
             }`}
           >
-            Vão para Produção ({vaoCount})
+            Em Produção ({vaoCount})
           </button>
           <button
             type="button"
             onClick={() => setFilterType('nao_vao')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               filterType === 'nao_vao'
-                ? 'bg-red-500 text-white shadow-xs'
+                ? 'bg-amber-600 text-white shadow-xs'
                 : 'text-gray-400 hover:text-white'
             }`}
           >
-            NÃO Vão ({naoVaoCount})
+            Venda Direta ({naoVaoCount})
           </button>
         </div>
 
@@ -387,9 +387,9 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                       <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
                         rule.sendToProduction
                           ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                          : 'bg-red-500/20 text-red-400 border-red-500/30'
+                          : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                       }`}>
-                        {rule.sendToProduction ? 'VAI PARA PRODUÇÃO' : 'NÃO VAI PARA PRODUÇÃO'}
+                        {rule.sendToProduction ? 'EM PRODUÇÃO' : 'VENDA DIRETA'}
                       </span>
                     </div>
                     {rule.notes && (
@@ -411,10 +411,10 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                           theme === 'dark' ? 'bg-[#141414] border-[#252525] text-white' : 'bg-white border-gray-200 text-gray-900'
                         }`}
                       >
-                        <option value="bar">🍺 Adega & Bar</option>
-                        <option value="cozinha">🍳 Cozinha & Preparo</option>
-                        <option value="expedicao">📦 Expedição / Delivery</option>
-                        <option value="geral">🔔 Produção Geral</option>
+                        <option value="bar">Adega & Bar</option>
+                        <option value="cozinha">Cozinha & Gastronomia</option>
+                        <option value="expedicao">Expedição & Logística</option>
+                        <option value="geral">Central de Preparo</option>
                       </select>
                     </div>
                   )}
@@ -432,7 +432,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                       title="Imprimir cupom de ficha de produção automaticamente"
                     >
                       <Printer className="w-3.5 h-3.5" />
-                      <span>{rule.autoPrintTicket ? 'Auto Impressão' : 'Sem Impressão'}</span>
+                      <span>{rule.autoPrintTicket ? 'Impressão Automática' : 'Impressão Manual'}</span>
                     </button>
                   )}
 
@@ -443,10 +443,10 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                     className={`px-3 py-1.5 rounded-lg font-extrabold text-xs flex items-center gap-1 cursor-pointer transition-all ${
                       rule.sendToProduction
                         ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                        : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/40'
+                        : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 border border-amber-500/40'
                     }`}
                   >
-                    <span>{rule.sendToProduction ? 'Ativo na Tela' : 'Bloqueado'}</span>
+                    <span>{rule.sendToProduction ? 'Habilitado' : 'Desabilitado'}</span>
                   </button>
 
                   <button
@@ -469,7 +469,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
         theme === 'dark' ? 'border-[#1B1B1B]' : 'border-gray-100'
       }`}>
         <span className="text-xs text-gray-400 font-medium">
-          Configuração de envio de itens para produção e comandas da adega / cozinha.
+          Mapeamento oficial de categorias para roteamento e impressão em centrais de preparo.
         </span>
         <div className="flex items-center gap-2 w-full sm:w-auto">
           {onClose && (
@@ -491,7 +491,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
             }`}
           >
             <Save className="w-4 h-4" />
-            <span>Salvar e Sair</span>
+            <span>Salvar e Fechar</span>
           </button>
         </div>
       </div>
@@ -505,7 +505,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
             <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: theme === 'dark' ? '#1A1A1A' : '#E5E7EB' }}>
               <div className="flex items-center gap-2">
                 <Tag className="w-5 h-5 text-[#18F2A4]" />
-                <h3 className="text-sm font-black tracking-tight">Adicionar Categoria de Produção</h3>
+                <h3 className="text-sm font-black tracking-tight">Nova Categoria de Produção</h3>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -521,7 +521,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Porções Especiais / Vinhos Nobres / Tabacaria"
+                  placeholder="Informe a categoria..."
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
                   className={`p-2.5 rounded-xl border outline-none font-bold ${
@@ -531,7 +531,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-gray-400 font-bold uppercase text-[9px]">Comportamento na Produção</label>
+                <label className="text-gray-400 font-bold uppercase text-[9px]">Direcionamento Operacional</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -543,7 +543,7 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                     }`}
                   >
                     <Check className="w-4 h-4" />
-                    <span>VAI para Produção</span>
+                    <span>Enviar para Produção</span>
                   </button>
 
                   <button
@@ -551,19 +551,19 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                     onClick={() => setNewCatSendToProd(false)}
                     className={`p-2.5 rounded-xl border font-bold flex items-center justify-center gap-1.5 cursor-pointer ${
                       !newCatSendToProd
-                        ? 'bg-red-500/20 border-red-500 text-red-400'
+                        ? 'bg-amber-600/20 border-amber-500 text-amber-400'
                         : theme === 'dark' ? 'bg-[#111] border-gray-800 text-gray-500' : 'bg-gray-50 border-gray-200 text-gray-500'
                     }`}
                   >
                     <X className="w-4 h-4" />
-                    <span>NÃO VAI</span>
+                    <span>Venda Direta</span>
                   </button>
                 </div>
               </div>
 
               {newCatSendToProd && (
                 <div className="flex flex-col gap-1">
-                  <label className="text-gray-400 font-bold uppercase text-[9px]">Setor Operacional Destino</label>
+                  <label className="text-gray-400 font-bold uppercase text-[9px]">Setor Responsável</label>
                   <select
                     value={newCatSector}
                     onChange={(e) => setNewCatSector(e.target.value as any)}
@@ -571,19 +571,19 @@ export default function ProductionCategoryConfigManager({ theme, products, onClo
                       theme === 'dark' ? 'bg-[#111] border-gray-800 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'
                     }`}
                   >
-                    <option value="bar">🍺 Adega & Bar</option>
-                    <option value="cozinha">🍳 Cozinha & Preparo</option>
-                    <option value="expedicao">📦 Expedição / Delivery</option>
-                    <option value="geral">🔔 Produção Geral</option>
+                    <option value="bar">Adega & Bar</option>
+                    <option value="cozinha">Cozinha & Gastronomia</option>
+                    <option value="expedicao">Expedição & Logística</option>
+                    <option value="geral">Central de Preparo</option>
                   </select>
                 </div>
               )}
 
               <div className="flex flex-col gap-1">
-                <label className="text-gray-400 font-bold uppercase text-[9px]">Observações / Instruções (Opcional)</label>
+                <label className="text-gray-400 font-bold uppercase text-[9px]">Instruções de Preparo (Opcional)</label>
                 <input
                   type="text"
-                  placeholder="Ex: Imprimir via extra na cozinha"
+                  placeholder="Instruções operacionais..."
                   value={newCatNotes}
                   onChange={(e) => setNewCatNotes(e.target.value)}
                   className={`p-2.5 rounded-xl border outline-none ${

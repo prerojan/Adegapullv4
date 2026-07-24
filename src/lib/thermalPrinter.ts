@@ -199,7 +199,7 @@ export function bufferToHexPreview(buffer: Uint8Array, maxBytes: number = 32): s
 // Formats text into receipt layout based on paper width (32 chars for 58mm, 48 chars for 80mm)
 export function generateReceiptText(typeOrPayload: any, maybeData?: any, overridePaperSize?: string, customDocSettings?: any): string {
   let type = '';
-  let title = 'CUPOM TÉRMICO';
+  let title = 'CUPOM NÃO FISCAL';
   let data: any = null;
 
   if (typeof typeOrPayload === 'string') {
@@ -226,6 +226,8 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
   const cnpj = localStorage.getItem('adegaos_cnpj') || '';
   const headerText = localStorage.getItem('adegaos_header_text') || 'OBRIGADO PELA PREFERÊNCIA!';
   const footerText = localStorage.getItem('adegaos_footer_text') || 'FluxOS - Sistema de Gestão\n*** CUPOM NÃO FISCAL ***';
+  const customLogoText = localStorage.getItem('adegaos_receipt_logo_text') || '';
+  const customQrCodeText = localStorage.getItem('adegaos_receipt_qrcode_text') || localStorage.getItem('adegaos_pix_key') || '';
 
   const center = (text: string) => {
     if (text.length >= width) return text.slice(0, width);
@@ -250,14 +252,16 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
     lines.push(center(storeName));
     if (cnpj) lines.push(center(`CNPJ: ${cnpj}`));
     if (headerText) {
-      headerText.split('\n').forEach(h => lines.push(center(h)));
+      headerText.split('\n').forEach(h => {
+        if (h.trim()) lines.push(center(h.trim()));
+      });
     }
     lines.push(divider);
   }
 
-  // 2. Logo
-  if (isVis('logo')) {
-    lines.push(center('[ LOGO EMPRESA ]'));
+  // 2. Logo (Only if enabled AND logo text/brand is provided)
+  if (isVis('logo') && customLogoText.trim()) {
+    lines.push(center(customLogoText.trim().toUpperCase()));
     lines.push(divider);
   }
 
@@ -295,8 +299,11 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
       lines.push(divider);
       (data.items || []).forEach((it: any) => {
         const qtyStr = `${it.qty || it.quantity || 1}x`;
-        const nameStr = (it.name || it.productName || 'Item').slice(0, width - 8);
-        lines.push(justify(`${qtyStr} ${nameStr}`, it.notes ? `[${it.notes}]` : ''));
+        const nameStr = (it.name || it.productName || 'Item').trim();
+        lines.push(`${qtyStr} ${nameStr}`);
+        if (it.notes) {
+          lines.push(`   OBS: ${it.notes}`);
+        }
       });
     }
   } else {
@@ -306,7 +313,8 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
     const dateStr = sale.timestamp ? new Date(sale.timestamp).toLocaleString('pt-BR') : `${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`;
     
     if (isVis('orderNumber')) {
-      lines.push(justify('Cupom Nº:', `#${(sale.id || sale.number || '0000').slice(-8).toUpperCase()}`));
+      const ticketNum = sale.id || sale.number || '0000';
+      lines.push(justify('Cupom Nº:', `#${ticketNum.toString().slice(-8).toUpperCase()}`));
     }
     if (isVis('dateTime')) {
       lines.push(justify('Data:', dateStr));
@@ -317,15 +325,26 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
     
     if (isVis('itemsTable')) {
       lines.push(divider);
-      lines.push(justify('QTD PRODUTO', 'TOTAL'));
+      lines.push(justify('PRODUTO / QTD x UN', 'VALOR'));
       lines.push(divider);
 
       const items = sale.items || [];
       items.forEach((item: any) => {
         const qty = item.quantity || item.qty || 1;
-        const pName = (item.product?.name || item.productName || item.name || 'Produto').slice(0, width - 10);
-        const total = (item.totalPrice || (item.unitPrice * qty) || 0).toFixed(2);
-        lines.push(justify(`${qty}x ${pName}`, `R$ ${total}`));
+        const unitPrice = item.unitPrice || item.product?.sellPrice || 0;
+        const total = item.totalPrice || (unitPrice * qty) || 0;
+        const pName = (item.product?.name || item.productName || item.name || 'Produto').trim();
+        
+        const qtyStr = `${qty}x`;
+        const totalStr = `R$ ${total.toFixed(2)}`;
+        const unitStr = `R$ ${unitPrice.toFixed(2)}`;
+
+        // Professional POS Receipt Format:
+        // Line 1: Full Item Name
+        lines.push(pName);
+        // Line 2: Quantity & Unit Price (Left), Total Price (Right)
+        const detailLeft = `  ${qtyStr} x ${unitStr}`;
+        lines.push(justify(detailLeft, totalStr));
       });
     }
 
@@ -347,20 +366,28 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
     }
   }
 
-  if (isVis('qrCode')) {
+  // QR Code (Only if visible AND QR Code text / Pix key is set)
+  if (isVis('qrCode') && customQrCodeText.trim()) {
     lines.push(divider);
-    lines.push(center('[ QR CODE DE AUTENTICIDADE ]'));
+    lines.push(center('CHAVE PIX / CONSULTA:'));
+    lines.push(center(customQrCodeText.trim()));
   }
 
+  // Barcode (Only if visible AND sale ID exists)
   if (isVis('barcode')) {
-    lines.push(divider);
-    lines.push(center('||||||||||||||||||||||||||||||'));
-    lines.push(center('*' + (data.id || '123456789') + '*'));
+    const saleId = data.sale?.id || data.id || '';
+    if (saleId) {
+      lines.push(divider);
+      lines.push(center(`* ${saleId.toString().slice(-12).toUpperCase()} *`));
+    }
   }
 
-  if (isVis('footer')) {
+  // Footer (Only if visible)
+  if (isVis('footer') && footerText.trim()) {
     lines.push(divider);
-    footerText.split('\n').forEach(f => lines.push(center(f)));
+    footerText.split('\n').forEach(f => {
+      if (f.trim()) lines.push(center(f.trim()));
+    });
   }
 
   lines.push('\n\n\n');

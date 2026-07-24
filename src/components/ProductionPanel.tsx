@@ -451,7 +451,7 @@ export default function ProductionPanel({
                 ? 'border-[#18F2A4]/30 bg-[#18F2A4]/10 text-[#18F2A4] hover:bg-[#18F2A4]/20' 
                 : 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
             }`}
-            title="Configurar quais categorias vão ou não para a produção"
+            title="Configurar roteamento de categorias para a produção"
           >
             <Tag className="w-3.5 h-3.5" />
             <span>Categorias da Produção</span>

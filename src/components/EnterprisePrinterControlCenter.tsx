@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import ProductionCategoryConfigManager from './ProductionCategoryConfigManager';
 import {
   Printer,
   Wifi,
@@ -30,7 +29,8 @@ import {
   AlignCenter,
   AlignRight,
   Cpu,
-  Table
+  Table,
+  QrCode
 } from 'lucide-react';
 import {
   PrinterDevice,
@@ -373,6 +373,20 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
       }
       return copy;
     });
+  };
+
+  // Custom Brand Logo & QR Code Receipt Inputs
+  const [receiptLogoText, setReceiptLogoText] = useState(() => localStorage.getItem('adegaos_receipt_logo_text') || '');
+  const [receiptQrText, setReceiptQrText] = useState(() => localStorage.getItem('adegaos_receipt_qrcode_text') || localStorage.getItem('adegaos_pix_key') || '');
+
+  const handleUpdateLogoText = (val: string) => {
+    setReceiptLogoText(val);
+    localStorage.setItem('adegaos_receipt_logo_text', val);
+  };
+
+  const handleUpdateQrText = (val: string) => {
+    setReceiptQrText(val);
+    localStorage.setItem('adegaos_receipt_qrcode_text', val);
   };
 
   // New Profile Modal State
@@ -1517,8 +1531,44 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -3 }}
               transition={{ duration: 0.12 }}
-              className="flex flex-col gap-2.5"
+              className="flex flex-col gap-3"
             >
+              {/* BRAND ASSETS CONFIGURATION (LOGO & QR CODE / PIX) */}
+              <div className={`p-3.5 rounded-xl border flex flex-col md:flex-row gap-3 ${
+                isDark ? 'bg-[#0B0B0B] border-[#181818]' : 'bg-gray-50 border-gray-200 shadow-xs'
+              }`}>
+                <div className="flex-1 flex flex-col gap-1">
+                  <label className="text-[10px] font-extrabold uppercase text-gray-400 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-[#18F2A4]" /> Marca / Logotipo Texto do Cupom
+                  </label>
+                  <input
+                    type="text"
+                    value={receiptLogoText}
+                    onChange={(e) => handleUpdateLogoText(e.target.value)}
+                    placeholder="Ex: ADEGA CENTRAL - BEBIDAS & CONVENIÊNCIA"
+                    className={`w-full p-2 rounded-lg border font-bold text-xs outline-none ${
+                      isDark ? 'bg-[#141414] border-gray-800 text-white' : 'bg-white border-gray-300 text-slate-900'
+                    }`}
+                  />
+                  <span className="text-[10px] text-gray-500">Impresso no topo do cupom quando 'Logotipo da Empresa' estiver visível.</span>
+                </div>
+
+                <div className="flex-1 flex flex-col gap-1">
+                  <label className="text-[10px] font-extrabold uppercase text-gray-400 flex items-center gap-1.5">
+                    <QrCode className="w-3.5 h-3.5 text-[#18F2A4]" /> Chave Pix ou Conteúdo para QR Code
+                  </label>
+                  <input
+                    type="text"
+                    value={receiptQrText}
+                    onChange={(e) => handleUpdateQrText(e.target.value)}
+                    placeholder="Ex: 000.000.000-00 ou https://sualoja.com"
+                    className={`w-full p-2 rounded-lg border font-bold text-xs outline-none ${
+                      isDark ? 'bg-[#141414] border-gray-800 text-white' : 'bg-white border-gray-300 text-slate-900'
+                    }`}
+                  />
+                  <span className="text-[10px] text-gray-500">Impresso no rodapé do cupom quando 'QR Code' estiver visível.</span>
+                </div>
+              </div>
               {/* DESKTOP TABLE VIEW (md+) */}
               <div className={`hidden md:block w-full overflow-x-auto scrollbar-thin rounded-xl border ${
                 isDark ? 'bg-[#0A0A0A] border-[#161616]' : 'bg-white border-gray-200'
@@ -1895,11 +1945,6 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                     {currentConfig.rules.autoPrintOnSale ? <ToggleRight className="w-5 h-5 text-[#18F2A4]" /> : <ToggleLeft className="w-5 h-5 text-gray-500" />}
                   </button>
                 </div>
-              </div>
-
-              {/* Category Production Rules Configurator */}
-              <div className="md:col-span-2 mt-2">
-                <ProductionCategoryConfigManager theme={theme} />
               </div>
             </motion.div>
           )}
