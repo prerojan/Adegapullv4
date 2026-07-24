@@ -656,8 +656,9 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
         };
       } else {
         // System Spooler
-        const { printViaSystemBrowser } = await import('../lib/thermalPrinter');
-        const ok = await printViaSystemBrowser(receiptText, currentConfig.hardware.paperSize);
+        const { printViaSystemBrowser, generateReceiptHtml } = await import('../lib/thermalPrinter');
+        const testHtml = generateReceiptHtml('sale', testData, currentConfig.hardware.paperSize, currentConfig.document, currentConfig.layout);
+        const ok = await printViaSystemBrowser(receiptText, currentConfig.hardware.paperSize, testHtml);
         res = {
           success: ok,
           durationMs: Math.round(performance.now() - startTime),

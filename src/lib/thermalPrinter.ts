@@ -196,7 +196,7 @@ export function bufferToHexPreview(buffer: Uint8Array, maxBytes: number = 32): s
   return buffer.length > maxBytes ? `${hex} ... (+${buffer.length - maxBytes} bytes)` : hex;
 }
 
-// Formats text into receipt layout based on paper width (32 chars for 58mm, 48 chars for 80mm)
+// Formats text into receipt layout based on paper width (30 chars for 58mm, 44 chars for 80mm)
 export function generateReceiptText(typeOrPayload: any, maybeData?: any, overridePaperSize?: string, customDocSettings?: any): string {
   let type = '';
   let title = 'CUPOM NÃO FISCAL';
@@ -215,7 +215,8 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
   }
 
   const paperSize = overridePaperSize || localStorage.getItem('adegaos_paper_size') || '58mm';
-  const width = paperSize === '80mm' ? 48 : 32;
+  // 30 chars for 58mm (48mm printable area), 44 chars for 80mm (72mm printable area)
+  const width = paperSize === '80mm' ? 44 : 30;
   const divider = '-'.repeat(width);
   const doubleDivider = '='.repeat(width);
 
@@ -339,10 +340,8 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
         const totalStr = `R$ ${total.toFixed(2)}`;
         const unitStr = `R$ ${unitPrice.toFixed(2)}`;
 
-        // Professional POS Receipt Format:
-        // Line 1: Full Item Name
+        // POS Receipt Format:
         lines.push(pName);
-        // Line 2: Quantity & Unit Price (Left), Total Price (Right)
         const detailLeft = `  ${qtyStr} x ${unitStr}`;
         lines.push(justify(detailLeft, totalStr));
       });
@@ -395,6 +394,265 @@ export function generateReceiptText(typeOrPayload: any, maybeData?: any, overrid
   return lines.join('\n');
 }
 
+// Generate styled HTML document with flexbox layout, bolding, and zero clipping for System Thermal Printing
+export function generateReceiptHtml(
+  typeOrPayload: any,
+  maybeData?: any,
+  overridePaperSize?: string,
+  customDocSettings?: any,
+  customLayoutSettings?: any
+): string {
+  let type = '';
+  let title = 'CUPOM NÃO FISCAL';
+  let data: any = null;
+
+  if (typeof typeOrPayload === 'string') {
+    type = typeOrPayload;
+    data = maybeData || {};
+    if (type === 'cash_flow') title = 'FECHAMENTO DE CAIXA';
+    else if (type === 'comanda') title = 'COMPROVANTE DE PRODUÇÃO';
+    else if (type === 'sale') title = 'CUPOM NÃO FISCAL';
+  } else if (typeOrPayload && typeof typeOrPayload === 'object') {
+    type = typeOrPayload.type || 'sale';
+    title = typeOrPayload.title || 'CUPOM NÃO FISCAL';
+    data = typeOrPayload.data || {};
+  }
+
+  const paperSize = overridePaperSize || localStorage.getItem('adegaos_paper_size') || '58mm';
+  const widthCss = paperSize === '80mm' ? '72mm' : '48mm';
+  const doc = customDocSettings || {};
+  const layout = customLayoutSettings || {};
+  const isVis = (elKey: string) => doc[elKey]?.visible !== false;
+
+  const storeName = (localStorage.getItem('adegaos_store_name') || 'ADEGA CENTRAL').toUpperCase();
+  const cnpj = localStorage.getItem('adegaos_cnpj') || '';
+  const headerText = localStorage.getItem('adegaos_header_text') || 'OBRIGADO PELA PREFERÊNCIA!';
+  const footerText = localStorage.getItem('adegaos_footer_text') || 'FluxOS - Sistema de Gestão\n*** CUPOM NÃO FISCAL ***';
+  const customLogoText = localStorage.getItem('adegaos_receipt_logo_text') || '';
+  const customQrCodeText = localStorage.getItem('adegaos_receipt_qrcode_text') || localStorage.getItem('adegaos_pix_key') || '';
+
+  const globalBold = layout.bold === true;
+  const globalWeight = globalBold ? '900' : '700';
+
+  let htmlBody = '';
+
+  const renderDivider = (type: 'single' | 'double' = 'single') => {
+    const style = type === 'double' ? 'border-top: 2px solid #000; margin: 4px 0;' : 'border-top: 1px dashed #000; margin: 3px 0;';
+    return `<div style="${style}"></div>`;
+  };
+
+  const renderFlexRow = (left: string, right: string, isBold: boolean = false, fontSize: string = '1em') => {
+    const weight = isBold || globalBold ? '900' : '600';
+    return `
+      <div style="display: flex; justify-content: space-between; align-items: baseline; width: 100%; font-weight: ${weight}; font-size: ${fontSize}; margin: 1px 0;">
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px;">${escapeHtml(left)}</span>
+        <span style="white-space: nowrap; font-variant-numeric: tabular-nums;">${escapeHtml(right)}</span>
+      </div>
+    `;
+  };
+
+  // 1. Header
+  if (isVis('header')) {
+    const headerBold = doc.header?.bold !== false || globalBold;
+    const headerWeight = headerBold ? '900' : '600';
+    const headerSize = doc.header?.size === 'double' ? '1.25em' : '1.05em';
+
+    htmlBody += `<div style="text-align: center; font-weight: ${headerWeight}; font-size: ${headerSize}; line-height: 1.2;">${escapeHtml(storeName)}</div>`;
+    if (cnpj) {
+      htmlBody += `<div style="text-align: center; font-size: 0.9em;">CNPJ: ${escapeHtml(cnpj)}</div>`;
+    }
+    if (headerText) {
+      headerText.split('\n').forEach(h => {
+        if (h.trim()) {
+          htmlBody += `<div style="text-align: center; font-size: 0.9em;">${escapeHtml(h.trim())}</div>`;
+        }
+      });
+    }
+    htmlBody += renderDivider('single');
+  }
+
+  // 2. Logo
+  if (isVis('logo') && customLogoText.trim()) {
+    htmlBody += `<div style="text-align: center; font-weight: 900; font-size: 1.1em;">${escapeHtml(customLogoText.trim().toUpperCase())}</div>`;
+    htmlBody += renderDivider('single');
+  }
+
+  // 3. Document Title
+  htmlBody += `<div style="text-align: center; font-weight: 900; font-size: 1.2em; text-transform: uppercase; letter-spacing: 0.5px; margin: 2px 0;">${escapeHtml(title)}</div>`;
+  htmlBody += renderDivider('single');
+
+  // Body Content
+  if (type === 'cash_flow' || data.cash_flow) {
+    const cf = data.cash_flow || data;
+    if (isVis('dateTime')) {
+      htmlBody += renderFlexRow('Data:', cf.date || new Date().toLocaleDateString('pt-BR'));
+      htmlBody += renderFlexRow('Hora:', cf.time || new Date().toLocaleTimeString('pt-BR'));
+    }
+    htmlBody += renderFlexRow('Operador:', cf.cashierId || 'GERENTE');
+    htmlBody += renderDivider('single');
+    htmlBody += renderFlexRow('Saldo Inicial:', `R$ ${(cf.initialBalance || 0).toFixed(2)}`);
+    htmlBody += renderFlexRow('Entradas Dinheiro:', `R$ ${(cf.cashIn || 0).toFixed(2)}`);
+    htmlBody += renderFlexRow('Vendas Cartão:', `R$ ${(cf.cardTotal || 0).toFixed(2)}`);
+    htmlBody += renderFlexRow('Vendas PIX:', `R$ ${(cf.pixTotal || 0).toFixed(2)}`);
+    htmlBody += renderFlexRow('Sangrias/Retiradas:', `R$ ${(cf.withdrawals || 0).toFixed(2)}`);
+    htmlBody += renderDivider('double');
+    htmlBody += renderFlexRow('TOTAL EM CAIXA:', `R$ ${(cf.totalInCash || 0).toFixed(2)}`, true, '1.2em');
+  } else if (type === 'comanda' || data.items) {
+    const orderBold = doc.orderNumber?.bold !== false || globalBold;
+    if (isVis('dateTime')) {
+      htmlBody += renderFlexRow('Data/Hora:', `${data.date || new Date().toLocaleDateString('pt-BR')} ${data.time || ''}`);
+    }
+    if (isVis('orderNumber')) {
+      htmlBody += renderFlexRow('Comanda/Mesa:', data.identifier || data.table || 'BALCÃO', orderBold, '1.2em');
+    }
+    if (data.sector) {
+      htmlBody += renderFlexRow('Setor:', data.sector.toUpperCase(), true);
+    }
+    htmlBody += renderDivider('single');
+
+    if (isVis('itemsTable')) {
+      htmlBody += renderFlexRow('QTD ITEM', 'OBS', true);
+      htmlBody += renderDivider('single');
+      (data.items || []).forEach((it: any) => {
+        const qtyStr = `${it.qty || it.quantity || 1}x`;
+        const nameStr = (it.name || it.productName || 'Item').trim();
+        htmlBody += `<div style="font-weight: 900; font-size: 1.1em; margin-top: 3px;">${escapeHtml(qtyStr)} ${escapeHtml(nameStr)}</div>`;
+        if (it.notes) {
+          htmlBody += `<div style="font-size: 0.9em; padding-left: 10px; font-style: italic;">OBS: ${escapeHtml(it.notes)}</div>`;
+        }
+      });
+    }
+  } else {
+    // Venda / Sale
+    const sale = data.sale || data;
+    const tx = data.transaction || {};
+    const dateStr = sale.timestamp ? new Date(sale.timestamp).toLocaleString('pt-BR') : `${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`;
+    const orderBold = doc.orderNumber?.bold !== false || globalBold;
+
+    if (isVis('orderNumber')) {
+      const ticketNum = sale.id || sale.number || '0000';
+      htmlBody += renderFlexRow('Cupom Nº:', `#${ticketNum.toString().slice(-8).toUpperCase()}`, orderBold, '1.1em');
+    }
+    if (isVis('dateTime')) {
+      htmlBody += renderFlexRow('Data:', dateStr);
+    }
+    if (isVis('customerName')) {
+      htmlBody += renderFlexRow('Cliente:', (sale.clientName || 'CONSUMIDOR').toUpperCase());
+    }
+
+    if (isVis('itemsTable')) {
+      htmlBody += renderDivider('single');
+      htmlBody += renderFlexRow('PRODUTO / QTD x UN', 'VALOR', true);
+      htmlBody += renderDivider('single');
+
+      const items = sale.items || [];
+      const itemsBold = doc.itemsTable?.bold || globalBold;
+      const itemsWeight = itemsBold ? '900' : '600';
+
+      items.forEach((item: any) => {
+        const qty = item.quantity || item.qty || 1;
+        const unitPrice = item.unitPrice || item.product?.sellPrice || 0;
+        const total = item.totalPrice || (unitPrice * qty) || 0;
+        const pName = (item.product?.name || item.productName || item.name || 'Produto').trim();
+
+        const qtyStr = `${qty}x`;
+        const totalStr = `R$ ${total.toFixed(2)}`;
+        const unitStr = `R$ ${unitPrice.toFixed(2)}`;
+
+        htmlBody += `<div style="font-weight: ${itemsWeight}; margin-top: 2px; word-break: break-word;">${escapeHtml(pName)}</div>`;
+        htmlBody += renderFlexRow(`  ${qtyStr} x ${unitStr}`, totalStr, itemsBold);
+      });
+    }
+
+    if (isVis('totals')) {
+      const totalsBold = doc.totals?.bold !== false || globalBold;
+      htmlBody += renderDivider('single');
+      htmlBody += renderFlexRow('Subtotal:', `R$ ${(sale.subtotal || sale.totalAmount || 0).toFixed(2)}`);
+      if (sale.discountAmount && sale.discountAmount > 0) {
+        htmlBody += renderFlexRow('Desconto:', `- R$ ${sale.discountAmount.toFixed(2)}`);
+      }
+      htmlBody += renderDivider('double');
+      htmlBody += renderFlexRow('TOTAL PAGO:', `R$ ${(sale.totalAmount || sale.total || 0).toFixed(2)}`, totalsBold, '1.25em');
+    }
+
+    if (isVis('payments')) {
+      htmlBody += renderFlexRow('Forma Pagto:', (sale.paymentMethod || tx.method || 'DINHEIRO').toUpperCase(), true);
+      if (sale.changeAmount && sale.changeAmount > 0) {
+        htmlBody += renderFlexRow('Troco:', `R$ ${sale.changeAmount.toFixed(2)}`);
+      }
+    }
+  }
+
+  // QR Code
+  if (isVis('qrCode') && customQrCodeText.trim()) {
+    htmlBody += renderDivider('single');
+    htmlBody += `<div style="text-align: center; font-weight: 800; font-size: 0.9em;">CHAVE PIX / CONSULTA:</div>`;
+    htmlBody += `<div style="text-align: center; font-weight: 900; font-size: 0.95em; word-break: break-all; margin-top: 2px;">${escapeHtml(customQrCodeText.trim())}</div>`;
+  }
+
+  // Barcode
+  if (isVis('barcode')) {
+    const saleId = data.sale?.id || data.id || '';
+    if (saleId) {
+      htmlBody += renderDivider('single');
+      htmlBody += `<div style="text-align: center; font-family: monospace; font-weight: 900; letter-spacing: 2px;">* ${escapeHtml(saleId.toString().slice(-12).toUpperCase())} *</div>`;
+    }
+  }
+
+  // Footer
+  if (isVis('footer') && footerText.trim()) {
+    htmlBody += renderDivider('single');
+    footerText.split('\n').forEach(f => {
+      if (f.trim()) {
+        htmlBody += `<div style="text-align: center; font-size: 0.85em; font-weight: 600;">${escapeHtml(f.trim())}</div>`;
+      }
+    });
+  }
+
+  const fontSizeCss = paperSize === '80mm' ? '12px' : '10px';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          @page {
+            size: ${widthCss} auto;
+            margin: 0mm;
+          }
+          *, *:before, *:after {
+            box-sizing: border-box;
+          }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            color: #000000;
+          }
+          body {
+            width: ${widthCss};
+            max-width: ${widthCss};
+            margin: 0 auto;
+            padding: 0 1mm 4mm 1mm;
+            font-family: 'Courier New', 'Consolas', 'Liberation Mono', monospace;
+            font-size: ${fontSizeCss};
+            font-weight: ${globalWeight};
+            line-height: 1.25;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            overflow: hidden;
+          }
+        </style>
+      </head>
+      <body>
+        ${htmlBody}
+      </body>
+    </html>
+  `;
+}
+
 // Helper to escape HTML characters
 function escapeHtml(str: string): string {
   return str
@@ -406,9 +664,9 @@ function escapeHtml(str: string): string {
 }
 
 // Instant Silent Printing via Hidden Iframe (System Printer / Windows Spooler)
-export function printViaSystemBrowser(receiptText: string, paperSize: string = '58mm'): Promise<boolean> {
+export function printViaSystemBrowser(receiptTextOrHtml: string, paperSize: string = '58mm', customHtml?: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const widthCss = paperSize === '80mm' ? '76mm' : '52mm';
+    const widthCss = paperSize === '80mm' ? '72mm' : '48mm';
 
     let printIframe = document.getElementById('adegaos-print-iframe') as HTMLIFrameElement;
     if (!printIframe) {
@@ -425,35 +683,45 @@ export function printViaSystemBrowser(receiptText: string, paperSize: string = '
       document.body.appendChild(printIframe);
     }
 
+    const htmlContent = customHtml || (receiptTextOrHtml.trim().startsWith('<!DOCTYPE') ? receiptTextOrHtml : `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            @page {
+              size: ${widthCss} auto;
+              margin: 0mm;
+            }
+            *, *:before, *:after {
+              box-sizing: border-box;
+            }
+            body {
+              margin: 0;
+              padding: 0 1mm 4mm 1mm;
+              width: ${widthCss};
+              max-width: ${widthCss};
+              font-family: 'Courier New', 'Consolas', monospace;
+              font-size: ${paperSize === '80mm' ? '12px' : '10px'};
+              font-weight: 700;
+              line-height: 1.25;
+              color: #000000;
+              white-space: pre-wrap;
+              word-break: break-word;
+              overflow-wrap: break-word;
+            }
+          </style>
+        </head>
+        <body>
+          <div>${escapeHtml(receiptTextOrHtml)}</div>
+        </body>
+      </html>
+    `);
+
     const doc = printIframe.contentWindow?.document;
     if (doc) {
       doc.open();
-      doc.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <style>
-              @page {
-                size: ${widthCss} auto;
-                margin: 0mm;
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                font-family: 'Courier New', Courier, monospace;
-                font-size: 11px;
-                line-height: 1.25;
-                color: #000000;
-                white-space: pre-wrap;
-                word-break: break-all;
-              }
-            </style>
-          </head>
-          <body>
-            <div>${escapeHtml(receiptText)}</div>
-          </body>
-        </html>
-      `);
+      doc.write(htmlContent);
       doc.close();
 
       setTimeout(() => {
@@ -466,7 +734,7 @@ export function printViaSystemBrowser(receiptText: string, paperSize: string = '
           window.print();
           resolve(true);
         }
-      }, 80);
+      }, 100);
     } else {
       resolve(false);
     }
@@ -573,8 +841,23 @@ export async function triggerThermalPrint(
 
   for (const printer of selectedPrinters) {
     for (let copy = 0; copy < (printer.copies || 1); copy++) {
-      const receiptText = generateReceiptText(typeOrPayload, maybeData, printer.paperSize);
-      const escPosBuffer = generateEscPosBuffer(receiptText, { autoCut: printer.autoCut });
+      let enterpriseConfig: any = null;
+      try {
+        const rawConfigs = localStorage.getItem('adegaos_enterprise_printer_configs_v2');
+        if (rawConfigs) {
+          const parsed = JSON.parse(rawConfigs);
+          if (Array.isArray(parsed)) {
+            enterpriseConfig = parsed.find((c: any) => c.id === printer.id) || parsed[0];
+          }
+        }
+      } catch (e) {}
+
+      const docSettings = enterpriseConfig?.document || {};
+      const layoutSettings = enterpriseConfig?.layout || {};
+
+      const receiptText = generateReceiptText(typeOrPayload, maybeData, printer.paperSize, docSettings);
+      const receiptHtml = generateReceiptHtml(typeOrPayload, maybeData, printer.paperSize, docSettings, layoutSettings);
+      const escPosBuffer = generateEscPosBuffer(receiptText, { autoCut: printer.autoCut, bold: layoutSettings.bold });
       totalBytes += escPosBuffer.length;
 
       localStorage.setItem('adegaos_last_receipt', receiptText);
@@ -593,7 +876,7 @@ export async function triggerThermalPrint(
         res = { success: true, durationMs: Math.round(performance.now() - start) };
       } else {
         // System Spooler / Iframe
-        const ok = await printViaSystemBrowser(receiptText, printer.paperSize);
+        const ok = await printViaSystemBrowser(receiptText, printer.paperSize, receiptHtml);
         res = { success: ok, durationMs: Math.round(performance.now() - start) };
       }
 
@@ -602,7 +885,7 @@ export async function triggerThermalPrint(
       if (!res.success && printer.method !== 'system') {
         // Fallback to system spooler on hardware direct fail
         console.warn(`[Printer Engine] Direct hardware failed (${res.errorMsg}). Falling back to System Spooler.`);
-        await printViaSystemBrowser(receiptText, printer.paperSize);
+        await printViaSystemBrowser(receiptText, printer.paperSize, receiptHtml);
       }
 
       // Record in Spooler Queue
