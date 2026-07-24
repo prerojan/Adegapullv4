@@ -4,6 +4,7 @@ import { Product, TableComandaState, Sale, FinancialTransaction, CashierUser, Sy
 import ProductCard from './ProductCard';
 import { ToastContainer, ToastItem, ToastType, playPremiumSound } from './ToastNotification';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
+import { eventBus } from '../services/eventBus';
 
 interface OrderAppProps {
   products: Product[];
@@ -311,6 +312,21 @@ export default function OrderApp({
     });
 
     onUpdateTableItems(selectedTableId, updatedItems);
+
+    // Publish ORDER_CREATED event to Corporate EventBus (triggers PrintService and NotificationService)
+    eventBus.publish('ORDER_CREATED', {
+      id: `ORD_${selectedTableId}_${Date.now()}`,
+      table: `${activeTable.type === 'mesa' ? 'Mesa' : 'Comanda'} ${activeTable.number}`,
+      items: orderCart.map(c => ({
+        name: c.product.name,
+        qty: c.quantity,
+        notes: c.notes,
+        price: c.product.sellPrice
+      })),
+      sector: 'cozinha',
+      clientName: authorizedUser?.name || 'Garçom'
+    });
+
     setOrderCart([]);
     
     // Notify
@@ -447,8 +463,11 @@ export default function OrderApp({
       })
     };
 
-    triggerThermalPrint('sale', receiptData).catch(err => {
-      console.error("Erro na impressão do cupom:", err);
+    // Publish PRINT_REQUESTED to background PrintService via EventBus
+    eventBus.publish('PRINT_REQUESTED', {
+      type: 'sale',
+      data: receiptData,
+      jobKey: `sale_receipt_${saleNumber}`
     });
 
     // Reset temporary cashier inputs

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, ShoppingBag, Trash2, Calendar, FileText, Printer, CheckCircle, XCircle } from 'lucide-react';
 import { Sale, Product } from '../types';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
+import { eventBus } from '../services/eventBus';
 
 const alert = (window as any).alert;
 
@@ -40,10 +41,10 @@ export default function ManagerSales({
   }, [sales, searchTerm, dateFilter]);
 
   const handlePrintDuplicate = (sale: Sale) => {
-    triggerThermalPrint({
+    eventBus.publish('PRINT_REQUESTED', {
       type: 'sale',
-      title: `Segunda Via - Venda #${sale.id.slice(-6)}`,
-      data: { sale }
+      data: { sale },
+      jobKey: `reprint_sale_${sale.id}`
     });
   };
 

@@ -3,6 +3,13 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 
+// Initialize FluxOS Background Operational Services (EventBus, PrintService, NotificationService, AudioManager, PwaService)
+import { notificationService } from './services/notificationService';
+import { printService } from './services/printService';
+
+notificationService.init();
+printService.init();
+
 interface ErrorBoundaryProps {
   children: ReactNode;
 }

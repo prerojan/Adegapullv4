@@ -3,6 +3,7 @@ import { X, Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, DollarSign, W
 import { Product, Sale, FinancialTransaction, CashierUser, Shift } from '../types';
 import { playPremiumSound } from './ToastNotification';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
+import { eventBus } from '../services/eventBus';
 
 const alert = (window as any).alert;
 
@@ -194,11 +195,18 @@ export default function QuickSaleSidebar({
       onUpdateStock(item.product.id, 0, -item.quantity);
     });
 
-    // 5. Trigger printer simulation
-    triggerThermalPrint({
+    // 5. Trigger printer via EventBus
+    eventBus.publish('PRINT_REQUESTED', {
       type: 'sale',
-      title: `Cupom de Venda #${saleId.slice(-6)}`,
-      data: { sale: newSale, transaction: newTx }
+      data: { sale: newSale, transaction: newTx },
+      jobKey: `quicksale_${saleId}`
+    });
+
+    eventBus.publish('NOTIFICATION_REQUESTED', {
+      type: 'order_created',
+      title: 'Venda Rápida Registrada',
+      message: `Venda Rápida #${saleId.slice(-6)} concluída com sucesso.`,
+      sound: 'cash_flow'
     });
 
     // 6. Reset Form

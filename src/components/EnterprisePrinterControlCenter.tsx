@@ -30,8 +30,16 @@ import {
   AlignRight,
   Cpu,
   Table,
-  QrCode
+  QrCode,
+  Volume2,
+  Bell,
+  VolumeX,
+  Zap
 } from 'lucide-react';
+import { printService, PrintQueueItem } from '../services/printService';
+import { audioManager, SoundType } from '../services/audioManager';
+import { pwaService } from '../services/pwaService';
+import { eventBus } from '../services/eventBus';
 import {
   PrinterDevice,
   getSavedPrinters,
@@ -337,7 +345,13 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
   });
 
   const [selectedId, setSelectedId] = useState<string>(configs[0]?.id || 'prn_main_caixa');
-  const [activeTab, setActiveTab] = useState<'connection' | 'hardware' | 'layout' | 'document' | 'rules' | 'diagnostics'>('connection');
+  const [activeTab, setActiveTab] = useState<'connection' | 'hardware' | 'layout' | 'document' | 'rules' | 'diagnostics' | 'background_services'>('connection');
+
+  // Background Services State
+  const [printQueueList, setPrintQueueList] = useState<PrintQueueItem[]>(() => printService.getQueue());
+  const [soundSettings, setSoundSettings] = useState(() => audioManager.getSettings());
+  const [pwaPermission, setPwaPermission] = useState<string>(() => pwaService.getPermissionStatus());
+  const [eventBusStream, setEventBusStream] = useState<Array<{ id: string; time: string; type: string; details: string }>>([]);
 
   // Spooler Queue & Logs State
   const [spoolQueue, setSpoolQueue] = useState<SpoolJob[]>(() => getSpoolQueue());
@@ -351,7 +365,26 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
       setSpoolQueue(getSpoolQueue());
     };
     window.addEventListener('adegaos_spool_updated', handleSpoolUpdate);
-    return () => window.removeEventListener('adegaos_spool_updated', handleSpoolUpdate);
+
+    // EventBus Stream Monitor & PrintQueue Sync
+    const addLog = (type: string, details: string) => {
+      setEventBusStream(prev => [
+        { id: `${Date.now()}_${Math.random()}`, time: new Date().toLocaleTimeString(), type, details },
+        ...prev.slice(0, 40)
+      ]);
+      setPrintQueueList(printService.getQueue());
+    };
+
+    const unsub1 = eventBus.subscribe('ORDER_CREATED', (p) => addLog('ORDER_CREATED', `Mesa/Comanda: ${p.table || p.id} (${p.items?.length || 0} itens)`));
+    const unsub2 = eventBus.subscribe('ORDER_READY', (p) => addLog('ORDER_READY', `Mesa/Comanda: ${p.table || p.id} Pronta!`));
+    const unsub3 = eventBus.subscribe('ORDER_CANCELLED', (p) => addLog('ORDER_CANCELLED', `Mesa/Comanda: ${p.table || p.id} Cancelada`));
+    const unsub4 = eventBus.subscribe('PRINT_REQUESTED', (p) => addLog('PRINT_REQUESTED', `Tipo: ${p.type} (${p.sector || 'geral'})`));
+    const unsub5 = eventBus.subscribe('PRINT_COMPLETED', (p) => addLog('PRINT_COMPLETED', `Key: ${p.jobKey} - Sucesso: ${p.success}`));
+
+    return () => {
+      window.removeEventListener('adegaos_spool_updated', handleSpoolUpdate);
+      unsub1(); unsub2(); unsub3(); unsub4(); unsub5();
+    };
   }, []);
 
   // Update draft printer configuration and persist to localStorage
@@ -901,6 +934,7 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
           { id: 'document', label: '4. Matriz Documento', icon: Table },
           { id: 'rules', label: '5. Regras & Setores', icon: Server },
           { id: 'diagnostics', label: '6. Diagnóstico & Spooler', icon: Activity },
+          { id: 'background_services', label: '7. Serviços & Áudio', icon: Zap },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1344,7 +1378,7 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                       onChange={(e) => updateCurrentConfig(d => {
                         const val = e.target.value as '58mm' | '80mm';
                         d.hardware.paperSize = val;
-                        d.hardware.columnsCount = val === '58mm' ? 32 : 48;
+                        d.hardware.columnsCount = 0;
                       })}
                       className={`p-2 rounded-lg border font-bold text-xs outline-none ${
                         isDark ? 'bg-[#111] border-gray-800 text-white' : 'bg-gray-50 border-gray-300 text-slate-900'
@@ -1355,15 +1389,17 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                     </select>
 
                     <select
-                      value={currentConfig.hardware.columnsCount}
+                      value={currentConfig.hardware.columnsCount || 0}
                       onChange={(e) => updateCurrentConfig(d => { d.hardware.columnsCount = Number(e.target.value); })}
                       className={`p-2 rounded-lg border font-mono font-bold text-xs outline-none ${
                         isDark ? 'bg-[#111] border-gray-800 text-white' : 'bg-gray-50 border-gray-300 text-slate-900'
                       }`}
                     >
-                      <option value={32}>32 Col</option>
-                      <option value={42}>42 Col</option>
-                      <option value={48}>48 Col</option>
+                      <option value={0}>Auto (Calculado)</option>
+                      <option value={32}>32 Col (Manual)</option>
+                      <option value={42}>42 Col (Manual)</option>
+                      <option value={48}>48 Col (Manual)</option>
+                      <option value={64}>64 Col (Manual)</option>
                     </select>
                   </div>
                 </div>
@@ -2141,6 +2177,284 @@ export default function EnterprisePrinterControlCenter({ theme }: EnterprisePrin
                     </div>
                   ))}
                 </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* =========================================================================
+              PANEL 7: SERVIÇOS EM BACKGROUND, SINTETIZADOR DE ÁUDIO & NOTIFICAÇÕES PWA
+              ========================================================================= */}
+          {activeTab === 'background_services' && (
+            <motion.div
+              key="background_services"
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -3 }}
+              transition={{ duration: 0.12 }}
+              className="flex flex-col gap-5"
+            >
+              {/* Header Banner */}
+              <div className={`p-4 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                isDark ? 'bg-gradient-to-r from-[#0D1B13] to-[#0A0A0A] border-[#18F2A4]/20' : 'bg-gradient-to-r from-emerald-50 to-white border-emerald-200'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-xl bg-[#18F2A4]/10 text-[#18F2A4] border border-[#18F2A4]/30 shrink-0">
+                    <Zap className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm flex items-center gap-2">
+                      <span>Serviços Desacoplados de Background</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#18F2A4]/15 text-[#18F2A4] border border-[#18F2A4]/30">Singleton Active</span>
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Impressão, Áudio Sintetizado e Notificações PWA rodando em segundo plano independente de telas.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs">
+                  <span className={`px-3 py-1.5 rounded-xl border font-mono font-bold flex items-center gap-1.5 ${
+                    soundSettings.isUnlocked ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  }`}>
+                    <Volume2 className="w-4 h-4" />
+                    <span>{soundSettings.isUnlocked ? 'Áudio Unlocked' : 'Áudio Muted/Waiting Tap'}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Grid 1: Audio Synthesizer Controls & PWA Background */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* Audio Synthesizer Panel */}
+                <div className={`p-4 rounded-2xl border flex flex-col gap-3.5 ${
+                  isDark ? 'bg-[#111111] border-gray-800' : 'bg-white border-gray-200'
+                }`}>
+                  <div className="flex items-center justify-between border-b pb-2.5 border-gray-800/60">
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-[#18F2A4]" />
+                      <h4 className="font-bold text-xs uppercase tracking-wider">1. Sintetizador de Áudio (Web Audio API)</h4>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold">
+                      <span>{soundSettings.soundEnabled ? 'Ativado' : 'Mutado'}</span>
+                      <input
+                        type="checkbox"
+                        checked={soundSettings.soundEnabled}
+                        onChange={(e) => {
+                          audioManager.saveSettings(soundSettings.volume, e.target.checked);
+                          setSoundSettings(audioManager.getSettings());
+                        }}
+                        className="accent-[#18F2A4] w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Volume Control Slider */}
+                  <div className="flex items-center gap-3 bg-gray-900/40 p-3 rounded-xl border border-gray-800">
+                    <span className="text-xs font-bold text-gray-400 min-w-16">Volume:</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={soundSettings.volume}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        audioManager.saveSettings(val, soundSettings.soundEnabled);
+                        setSoundSettings(audioManager.getSettings());
+                      }}
+                      className="w-full accent-[#18F2A4] cursor-pointer"
+                    />
+                    <span className="text-xs font-mono font-bold text-[#18F2A4] min-w-10 text-right">
+                      {Math.round(soundSettings.volume * 100)}%
+                    </span>
+                  </div>
+
+                  {/* Audio Test Tones Grid */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Testar Timbres Operacionais:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        { sound: 'order_created', label: '🔔 Novo Pedido', color: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
+                        { sound: 'order_ready', label: '🎉 Pedido Pronto', color: 'bg-blue-500/10 text-blue-300 border-blue-500/20' },
+                        { sound: 'order_cancelled', label: '⚠️ Cancelado', color: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
+                        { sound: 'cash_flow', label: '💰 Caixa / Venda', color: 'bg-purple-500/10 text-purple-300 border-purple-500/20' },
+                        { sound: 'print_error', label: '🚨 Erro Impressão', color: 'bg-red-500/10 text-red-300 border-red-500/20' },
+                        { sound: 'ding', label: '🔔 Sinal Padrão', color: 'bg-gray-500/10 text-gray-300 border-gray-500/20' }
+                      ].map(item => (
+                        <button
+                          key={item.sound}
+                          type="button"
+                          onClick={() => audioManager.play(item.sound as SoundType)}
+                          className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer hover:scale-[1.02] active:scale-95 flex items-center justify-center ${item.color}`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* PWA & System Notifications Panel */}
+                <div className={`p-4 rounded-2xl border flex flex-col gap-3.5 ${
+                  isDark ? 'bg-[#111111] border-gray-800' : 'bg-white border-gray-200'
+                }`}>
+                  <div className="flex items-center justify-between border-b pb-2.5 border-gray-800/60">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-[#18F2A4]" />
+                      <h4 className="font-bold text-xs uppercase tracking-wider">2. Notificações PWA / Push em Segundo Plano</h4>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                      pwaPermission === 'granted' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    }`}>
+                      {pwaPermission}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    Permite enviar alertas nativos do SO/Android mesmo quando o navegador ou app estiver minimizado.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-2 mt-auto pt-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const granted = await pwaService.requestNotificationPermission();
+                        setPwaPermission(pwaService.getPermissionStatus());
+                        if (granted) alert('Permissão de Notificação Concedida com Sucesso!');
+                      }}
+                      className={`flex-1 py-2.5 px-3 rounded-xl border font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 ${
+                        pwaPermission === 'granted'
+                          ? 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700'
+                          : 'bg-[#18F2A4] text-black border-[#18F2A4] hover:bg-[#12d58f]'
+                      }`}
+                    >
+                      <Bell className="w-3.5 h-3.5" />
+                      <span>{pwaPermission === 'granted' ? 'Permissão Ativa' : 'Solicitar Permissão'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const sent = await pwaService.sendNotification('FluxOS Teste em Segundo Plano', {
+                          body: 'Esta é uma notificação nativa de teste disparada pelo Service Worker!',
+                          tag: `test_${Date.now()}`
+                        });
+                        if (!sent && pwaPermission !== 'granted') {
+                          alert('Solicite e permita as Notificações do Navegador primeiro.');
+                        }
+                      }}
+                      className="py-2.5 px-4 rounded-xl border border-gray-700 bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-[#18F2A4]" />
+                      <span>Testar Alerta PWA</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Section 3: Print Queue & Deduplication Engine Status */}
+              <div className={`p-4 rounded-2xl border flex flex-col gap-3 ${
+                isDark ? 'bg-[#111111] border-gray-800' : 'bg-white border-gray-200'
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5 border-gray-800/60">
+                  <div className="flex items-center gap-2">
+                    <Printer className="w-4 h-4 text-[#18F2A4]" />
+                    <h4 className="font-bold text-xs uppercase tracking-wider">3. Fila de Impressão Background (PrintService Singleton)</h4>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                      Deduplicação 30s Ativa
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        printService.clearCompleted();
+                        setPrintQueueList(printService.getQueue());
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-gray-800 hover:bg-gray-700 text-gray-300 cursor-pointer border border-gray-700"
+                    >
+                      Limpar Concluídos
+                    </button>
+                  </div>
+                </div>
+
+                {printQueueList.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-gray-500 italic">
+                    Nenhum trabalho na fila de impressão no momento.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                    {printQueueList.map(item => (
+                      <div key={item.id} className="p-2.5 rounded-xl border border-gray-800 bg-gray-900/30 flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] uppercase ${
+                            item.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' :
+                            item.status === 'error' ? 'bg-red-500/20 text-red-400' :
+                            item.status === 'processing' ? 'bg-blue-500/20 text-blue-400 animate-pulse' :
+                            'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {item.status}
+                          </span>
+                          <span className="font-bold text-gray-200 truncate">{item.type.toUpperCase()}</span>
+                          <span className="text-[10px] font-mono text-gray-500 truncate">({item.jobKey})</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {item.status === 'error' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                printService.reprocessJob(item.id);
+                                setPrintQueueList(printService.getQueue());
+                              }}
+                              className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold border border-amber-500/30 cursor-pointer"
+                            >
+                              Reprocessar
+                            </button>
+                          )}
+                          <span className="text-[10px] text-gray-500">{new Date(item.createdTime).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 4: EventBus Real-time Activity Stream */}
+              <div className={`p-4 rounded-2xl border flex flex-col gap-3 font-mono text-[11px] ${
+                isDark ? 'bg-[#050505] border-gray-800' : 'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex items-center justify-between border-b pb-2 border-gray-800">
+                  <span className="text-[#18F2A4] font-bold flex items-center gap-2">
+                    <Radio className="w-4 h-4" /> Stream do Barramento de Eventos Corporate (EventBus)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEventBusStream([])}
+                    className="text-[10px] text-gray-400 hover:text-white cursor-pointer"
+                  >
+                    Limpar Logs
+                  </button>
+                </div>
+
+                {eventBusStream.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500 italic">
+                    Aguardando emissão de novos eventos pelo sistema... (Crie pedidos, finalize vendas ou altere status)
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {eventBusStream.map(log => (
+                      <div key={log.id} className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-500">[{log.time}]</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#18F2A4]/10 text-[#18F2A4] border border-[#18F2A4]/20">
+                          {log.type}
+                        </span>
+                        <span className="text-gray-300 truncate">{log.details}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

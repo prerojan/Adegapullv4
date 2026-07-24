@@ -1,13 +1,17 @@
 // FluxOS Thermal Printer Engine - Refactored ESC/POS & Document Matrix Architecture
 // Clean Separation: Layout Engine -> Matrix Builder -> Style Engine -> ESC/POS Generator -> Transport Layer
+// ZERO Hardcoded Column Constants (32, 42, 48). All layouts are calculated dynamically from PhysicalPrinterProfile.
 
 export interface PhysicalPrinterProfile {
-  paperSize: '58mm' | '80mm';
+  paperSize: '58mm' | '80mm' | string;
+  paperWidthMm: number; // 58mm or 80mm
   printableWidthMm: number; // e.g., 48mm for 58mm roll, 72mm for 80mm roll
+  printableWidthDots: number; // e.g., 384 dots @ 203 DPI
+  dotsPerMm: number; // default 8 dots/mm (203 DPI)
   fontFamily: 'font_a' | 'font_b' | 'font_c';
-  fontWidthDots: number; // Font A = 12 dots, Font B = 9 dots
+  fontWidthDots: number; // Font A = 12 dots, Font B = 9 dots, Font C = 8 dots
   fontHeightDots: number; // 24 dots
-  columnsCount: number; // total columns (e.g., 32, 42, 48, 64)
+  columnsCount: number; // total calculated columns (e.g. 32, 42, 48, 64)
   leftMarginCols: number;
   rightMarginCols: number;
   usableColumns: number; // columnsCount - leftMarginCols - rightMarginCols
@@ -27,9 +31,18 @@ export interface TextStyle {
   font?: 'font_a' | 'font_b' | 'font_c';
 }
 
+export interface ColumnDef {
+  text: string;
+  widthRatio?: number; // ratio of printable width (0.0 to 1.0)
+  widthCols?: number;  // explicit absolute character columns
+  align?: 'left' | 'center' | 'right';
+  mode?: 'wrap' | 'truncate' | 'ellipsis';
+}
+
 export type MatrixLine =
   | { type: 'text'; text: string; align?: 'left' | 'center' | 'right'; style?: TextStyle }
   | { type: 'flex_row'; leftText: string; rightText: string; style?: TextStyle; isBold?: boolean }
+  | { type: 'table_row'; cols: ColumnDef[]; style?: TextStyle }
   | { type: 'divider'; char?: string; double?: boolean; style?: TextStyle }
   | { type: 'blank'; count?: number }
   | { type: 'barcode'; code: string; style?: TextStyle }
@@ -63,7 +76,7 @@ export interface PrinterDevice {
 }
 
 // -----------------------------------------------------------------------------
-// 1. HARDWARE & PROFILE ENGINE
+// 1. HARDWARE & PROFILE ENGINE (DYNAMIC PHYSICAL CALCULATIONS)
 // -----------------------------------------------------------------------------
 
 export function getPhysicalPrinterProfile(
@@ -71,34 +84,49 @@ export function getPhysicalPrinterProfile(
   hardwareConfig?: any,
   layoutConfig?: any
 ): PhysicalPrinterProfile {
-  const paperSize = (paperSizeOverride || hardwareConfig?.paperSize || localStorage.getItem('adegaos_paper_size') || '58mm') as '58mm' | '80mm';
+  const paperSize = (paperSizeOverride || hardwareConfig?.paperSize || localStorage.getItem('adegaos_paper_size') || '58mm') as string;
+  const paperWidthMm = paperSize === '80mm' ? 80 : 58;
+
+  const printableWidthMm = Number(hardwareConfig?.printableWidthMm) > 0
+    ? Number(hardwareConfig.printableWidthMm)
+    : (paperSize === '80mm' ? 72 : 48);
+
+  const dotsPerMm = Number(hardwareConfig?.dotsPerMm) > 0 ? Number(hardwareConfig.dotsPerMm) : 8; // 203 DPI standard
+  const printableWidthDots = Math.round(printableWidthMm * dotsPerMm);
+
   const fontFamily = (layoutConfig?.fontFamily || hardwareConfig?.fontFamily || 'font_a') as 'font_a' | 'font_b' | 'font_c';
-  
-  let defaultCols = 32;
-  let printableWidthMm = 48;
-  
-  if (paperSize === '80mm') {
-    printableWidthMm = 72;
-    defaultCols = fontFamily === 'font_b' ? 64 : 48;
-  } else {
-    printableWidthMm = 48;
-    defaultCols = fontFamily === 'font_b' ? 42 : 32;
+
+  let fontWidthDots = 12;
+  let fontHeightDots = 24;
+  if (fontFamily === 'font_b') {
+    fontWidthDots = 9;
+    fontHeightDots = 24;
+  } else if (fontFamily === 'font_c') {
+    fontWidthDots = 8;
+    fontHeightDots = 16;
   }
 
+  // Calculate maximum column capacity dynamically from physical metrics
+  const calculatedColumnsCount = Math.floor(printableWidthDots / fontWidthDots);
+
+  // Use explicit columns override if user explicitly supplied it in hardware config, otherwise strictly calculated
   const columnsCount = hardwareConfig?.columnsCount && Number(hardwareConfig.columnsCount) > 0
     ? Number(hardwareConfig.columnsCount)
-    : defaultCols;
+    : calculatedColumnsCount;
 
   const leftMarginCols = hardwareConfig?.leftMarginCols ? Math.max(0, Number(hardwareConfig.leftMarginCols)) : 0;
   const rightMarginCols = hardwareConfig?.rightMarginCols ? Math.max(0, Number(hardwareConfig.rightMarginCols)) : 0;
-  const usableColumns = Math.max(16, columnsCount - leftMarginCols - rightMarginCols);
+  const usableColumns = Math.max(8, columnsCount - leftMarginCols - rightMarginCols);
 
   return {
-    paperSize,
+    paperSize: paperSize as '58mm' | '80mm',
+    paperWidthMm,
     printableWidthMm,
+    printableWidthDots,
+    dotsPerMm,
     fontFamily,
-    fontWidthDots: fontFamily === 'font_b' ? 9 : 12,
-    fontHeightDots: 24,
+    fontWidthDots,
+    fontHeightDots,
     columnsCount,
     leftMarginCols,
     rightMarginCols,
@@ -111,91 +139,275 @@ export function getPhysicalPrinterProfile(
 }
 
 // -----------------------------------------------------------------------------
-// 2. TEXT WRAPPING & FORMATTING UTILITIES (ZERO CLIPPING GUARANTEE)
+// 2. LAYOUT ENGINE (ZERO HARDCODING, DYNAMIC FIT, TABLE RENDERER)
 // -----------------------------------------------------------------------------
 
-export function wrapText(text: string, maxCols: number): string[] {
-  if (!text) return [''];
-  const clean = text.replace(/\r/g, '').trim();
-  if (clean.length <= maxCols) return [clean];
+export class LayoutEngine {
+  private profile: PhysicalPrinterProfile;
 
-  const words = clean.split(' ');
-  const lines: string[] = [];
-  let currentLine = '';
+  constructor(profile?: PhysicalPrinterProfile) {
+    this.profile = profile || getPhysicalPrinterProfile();
+  }
 
-  for (const word of words) {
-    if (word.length > maxCols) {
-      // Word itself is longer than line capacity
-      if (currentLine) {
-        lines.push(currentLine);
-        currentLine = '';
-      }
-      let rem = word;
-      while (rem.length > maxCols) {
-        lines.push(rem.slice(0, maxCols));
-        rem = rem.slice(maxCols);
-      }
-      currentLine = rem;
-    } else if (currentLine.length + (currentLine ? 1 : 0) + word.length <= maxCols) {
-      currentLine += (currentLine ? ' ' : '') + word;
-    } else {
-      lines.push(currentLine);
-      currentLine = word;
+  public getProfile(): PhysicalPrinterProfile {
+    return this.profile;
+  }
+
+  public getUsableColumns(): number {
+    return this.profile.usableColumns;
+  }
+
+  public getMaxChars(style?: TextStyle): number {
+    const doubleWidth = style?.doubleWidth === true;
+    const cols = doubleWidth ? Math.floor(this.profile.usableColumns / 2) : this.profile.usableColumns;
+    return Math.max(1, cols);
+  }
+
+  // Pure alignment formatter WITHOUT padStart or padEnd
+  public alignString(text: string, widthCols: number, align: 'left' | 'center' | 'right' = 'left'): string {
+    const s = (text || '').replace(/\r|\n/g, '');
+    if (s.length >= widthCols) return s.slice(0, widthCols);
+    const diff = widthCols - s.length;
+
+    if (align === 'center') {
+      const leftPad = Math.floor(diff / 2);
+      const rightPad = diff - leftPad;
+      return ' '.repeat(leftPad) + s + ' '.repeat(rightPad);
     }
+    if (align === 'right') {
+      return ' '.repeat(diff) + s;
+    }
+    return s + ' '.repeat(diff);
   }
 
-  if (currentLine) lines.push(currentLine);
-  return lines;
-}
+  // fitText: Respects usable column capacity with wrapping or smart truncation
+  public fitText(
+    text: string,
+    maxWidthCols?: number,
+    options?: {
+      mode?: 'wrap' | 'truncate' | 'ellipsis';
+      align?: 'left' | 'center' | 'right';
+      style?: TextStyle;
+    }
+  ): string[] {
+    const limit = maxWidthCols ?? this.getMaxChars(options?.style);
+    const mode = options?.mode || 'wrap';
+    const align = options?.align || 'left';
+    const str = (text || '').replace(/\r/g, '');
 
-export function formatFlexRow(leftText: string, rightText: string, usableColumns: number): string[] {
-  const left = (leftText || '').trim();
-  const right = (rightText || '').trim();
-  
-  if (!left && !right) return [''];
-  if (!right) return wrapText(left, usableColumns);
-  if (!left) return [right.padStart(usableColumns, ' ')];
+    if (!str) return [this.alignString('', limit, align)];
 
-  const rightLen = right.length;
-  if (rightLen >= usableColumns) {
-    const wrappedLeft = wrapText(left, usableColumns);
-    return [...wrappedLeft, right.padStart(usableColumns, ' ')];
+    if (mode === 'truncate') {
+      const trunc = str.slice(0, limit);
+      return [this.alignString(trunc, limit, align)];
+    }
+
+    if (mode === 'ellipsis') {
+      if (str.length <= limit) return [this.alignString(str, limit, align)];
+      const ell = limit > 3 ? str.slice(0, limit - 3) + '...' : str.slice(0, limit);
+      return [this.alignString(ell, limit, align)];
+    }
+
+    // Default: 'wrap'
+    const words = str.trim().split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      if (word.length > limit) {
+        if (currentLine) {
+          lines.push(currentLine);
+          currentLine = '';
+        }
+        let rem = word;
+        while (rem.length > limit) {
+          lines.push(rem.slice(0, limit));
+          rem = rem.slice(limit);
+        }
+        currentLine = rem;
+      } else if (currentLine.length + (currentLine ? 1 : 0) + word.length <= limit) {
+        currentLine += (currentLine ? ' ' : '') + word;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    if (lines.length === 0) lines.push('');
+
+    return lines.map(line => this.alignString(line, limit, align));
   }
 
-  const availLeft = usableColumns - rightLen - 1;
-  const wrappedLeft = wrapText(left, Math.max(1, availLeft));
+  // Column Table Renderer replacing padStart/padEnd and manual concatenation
+  public renderRow(cols: ColumnDef[], style?: TextStyle): string[] {
+    const lineCapacity = this.getMaxChars(style);
+    if (!cols || cols.length === 0) return [this.alignString('', lineCapacity, 'left')];
 
-  if (wrappedLeft.length === 0) {
-    return [right.padStart(usableColumns, ' ')];
+    const widths: number[] = new Array(cols.length).fill(0);
+    let assignedCols = 0;
+    let unassignedCount = 0;
+
+    // Pass 1: Explicit column widths or ratios
+    cols.forEach((col, idx) => {
+      if (col.widthCols && col.widthCols > 0) {
+        widths[idx] = Math.min(lineCapacity, col.widthCols);
+        assignedCols += widths[idx];
+      } else if (col.widthRatio && col.widthRatio > 0) {
+        widths[idx] = Math.floor(lineCapacity * col.widthRatio);
+        assignedCols += widths[idx];
+      } else {
+        unassignedCount++;
+      }
+    });
+
+    // Pass 2: Flex width for unassigned columns
+    const remaining = Math.max(0, lineCapacity - assignedCols);
+    if (unassignedCount > 0) {
+      const flexWidth = Math.floor(remaining / unassignedCount);
+      cols.forEach((col, idx) => {
+        if (!widths[idx]) {
+          widths[idx] = flexWidth;
+        }
+      });
+    }
+
+    // Pass 3: Reconcile exact sum to match lineCapacity
+    const currentSum = widths.reduce((a, b) => a + b, 0);
+    const diff = lineCapacity - currentSum;
+    if (widths.length > 0) {
+      widths[widths.length - 1] = Math.max(1, widths[widths.length - 1] + diff);
+    }
+
+    // Format each cell
+    const colFormattedLines: string[][] = cols.map((col, idx) => {
+      const colWidth = widths[idx];
+      return this.fitText(col.text, colWidth, {
+        mode: col.mode || 'wrap',
+        align: col.align || 'left'
+      });
+    });
+
+    // Combine cell lines into row lines
+    const rowHeight = Math.max(...colFormattedLines.map(lines => lines.length), 1);
+    const resultRows: string[] = [];
+
+    for (let r = 0; r < rowHeight; r++) {
+      let lineStr = '';
+      cols.forEach((col, cIdx) => {
+        const colWidth = widths[cIdx];
+        const cellLine = colFormattedLines[cIdx][r] || this.alignString('', colWidth, col.align || 'left');
+        lineStr += cellLine;
+      });
+      resultRows.push(lineStr);
+    }
+
+    return resultRows;
   }
 
-  const result: string[] = [];
-  for (let i = 0; i < wrappedLeft.length - 1; i++) {
-    result.push(wrappedLeft[i]);
+  // 2-Column Flex Row Renderer
+  public renderFlexRow(leftText: string, rightText: string, style?: TextStyle): string[] {
+    const left = (leftText || '').trim();
+    const right = (rightText || '').trim();
+    const totalCols = this.getMaxChars(style);
+
+    if (!right) {
+      return this.fitText(left, totalCols, { mode: 'wrap', align: 'left', style });
+    }
+    if (!left) {
+      return [this.alignString(right, totalCols, 'right')];
+    }
+
+    const rightWidth = Math.min(totalCols - 2, Math.max(1, right.length));
+    const leftWidth = Math.max(1, totalCols - rightWidth);
+
+    return this.renderRow([
+      { text: left, widthCols: leftWidth, align: 'left', mode: 'wrap' },
+      { text: right, widthCols: rightWidth, align: 'right', mode: 'truncate' }
+    ], style);
   }
 
-  const lastLeft = wrappedLeft[wrappedLeft.length - 1];
-  const spaceCount = usableColumns - lastLeft.length - rightLen;
-  result.push(lastLeft + ' '.repeat(Math.max(1, spaceCount)) + right);
-
-  return result;
-}
-
-export function alignText(text: string, usableColumns: number, align: 'left' | 'center' | 'right' = 'left'): string {
-  const str = (text || '').trim();
-  if (str.length >= usableColumns) return str.slice(0, usableColumns);
-  if (align === 'center') {
-    const pad = Math.floor((usableColumns - str.length) / 2);
-    return ' '.repeat(pad) + str;
+  public renderDivider(char: string = '-', style?: TextStyle): string {
+    const cols = this.getMaxChars(style);
+    return char.repeat(cols);
   }
-  if (align === 'right') {
-    return str.padStart(usableColumns, ' ');
+
+  // Generate Numbered Ruler (12345678901234567890... up to usableColumns)
+  public generateRuler(): string {
+    const cols = this.profile.usableColumns;
+    let ruler = '';
+    for (let i = 1; i <= cols; i++) {
+      ruler += (i % 10).toString();
+    }
+    return ruler;
   }
-  return str;
+
+  // Diagnostic Mode Generator
+  public generateDiagnosticReport(modelName?: string): {
+    matrixLines: MatrixLine[];
+    ruler: string;
+  } {
+    const p = this.profile;
+    const ruler = this.generateRuler();
+
+    const matrixLines: MatrixLine[] = [
+      { type: 'text', text: 'DIAGNÓSTICO DA IMPRESSORA', align: 'center', style: { bold: true } },
+      { type: 'divider' },
+      { type: 'flex_row', leftText: 'Modelo:', rightText: modelName || p.paperSize, isBold: true },
+      { type: 'flex_row', leftText: 'Largura Papel:', rightText: `${p.paperWidthMm}mm` },
+      { type: 'flex_row', leftText: 'Largura Imprimível:', rightText: `${p.printableWidthMm}mm (${p.printableWidthDots} dots)` },
+      { type: 'flex_row', leftText: 'DPI / Resolução:', rightText: `${Math.round(p.dotsPerMm * 25.4)} DPI (${p.dotsPerMm} dots/mm)` },
+      { type: 'flex_row', leftText: 'Fonte Ativa:', rightText: `${p.fontFamily.toUpperCase()} (${p.fontWidthDots}x${p.fontHeightDots} dots)` },
+      { type: 'flex_row', leftText: 'Largura do Caractere:', rightText: `${p.fontWidthDots} dots (${(p.fontWidthDots / p.dotsPerMm).toFixed(2)}mm)` },
+      { type: 'flex_row', leftText: 'Colunas Max Detectadas:', rightText: `${p.columnsCount} cols` },
+      { type: 'flex_row', leftText: 'Colunas Efetivas Usadas:', rightText: `${p.usableColumns} cols`, isBold: true },
+      { type: 'divider' },
+      { type: 'text', text: 'RÉGUA NUMERADA DE COLUNAS (1 ATÉ MAX):', align: 'left', style: { bold: true } },
+      { type: 'text', text: ruler, align: 'left', style: { bold: true } },
+      { type: 'divider' },
+      { type: 'text', text: 'TESTE DE CARACTERES & SÍMBOLOS:', align: 'center', style: { bold: true } },
+      { type: 'text', text: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', align: 'left' },
+      { type: 'text', text: 'abcdefghijklmnopqrstuvwxyz!@#$%&*()', align: 'left' },
+      { type: 'divider', double: true }
+    ];
+
+    return { matrixLines, ruler };
+  }
 }
 
 // -----------------------------------------------------------------------------
-// 3. DOCUMENT MATRIX BUILDER (LAYOUT ENGINE)
+// STANDALONE UTILITIES (BACKWARD COMPATIBILITY FORWARDED TO LAYOUT ENGINE)
+// -----------------------------------------------------------------------------
+
+export function fitText(
+  text: string,
+  maxCols?: number,
+  options?: { mode?: 'wrap' | 'truncate' | 'ellipsis'; align?: 'left' | 'center' | 'right'; style?: TextStyle }
+): string[] {
+  const engine = new LayoutEngine();
+  return engine.fitText(text, maxCols, options);
+}
+
+export function wrapText(text: string, maxCols?: number): string[] {
+  const engine = new LayoutEngine();
+  return engine.fitText(text, maxCols, { mode: 'wrap' });
+}
+
+export function formatFlexRow(leftText: string, rightText: string, usableColumns?: number): string[] {
+  const profile = getPhysicalPrinterProfile();
+  if (usableColumns) profile.usableColumns = usableColumns;
+  const engine = new LayoutEngine(profile);
+  return engine.renderFlexRow(leftText, rightText);
+}
+
+export function alignText(text: string, usableColumns?: number, align: 'left' | 'center' | 'right' = 'left'): string {
+  const profile = getPhysicalPrinterProfile();
+  if (usableColumns) profile.usableColumns = usableColumns;
+  const engine = new LayoutEngine(profile);
+  return engine.alignString(text, usableColumns || engine.getUsableColumns(), align);
+}
+
+// -----------------------------------------------------------------------------
+// 3. DOCUMENT MATRIX BUILDER (USING LAYOUT ENGINE)
 // -----------------------------------------------------------------------------
 
 export function buildDocumentMatrix(
@@ -222,6 +434,7 @@ export function buildDocumentMatrix(
   }
 
   const profile = profileOverride || getPhysicalPrinterProfile();
+  const engine = new LayoutEngine(profile);
   const doc = customDocSettings || {};
   const isVis = (key: string) => doc[key]?.visible !== false;
 
@@ -233,6 +446,16 @@ export function buildDocumentMatrix(
   const customQrCodeText = localStorage.getItem('adegaos_receipt_qrcode_text') || localStorage.getItem('adegaos_pix_key') || '';
 
   const matrix: MatrixLine[] = [];
+
+  // Diagnostic Mode
+  if (type === 'diagnostic') {
+    const diagReport = engine.generateDiagnosticReport(data.model);
+    diagReport.matrixLines.forEach(l => matrix.push(l));
+    if (profile.cashDrawer) matrix.push({ type: 'drawer' });
+    if (profile.autoCut) matrix.push({ type: 'cut' });
+    matrix.push({ type: 'blank', count: 2 });
+    return matrix;
+  }
 
   // Header
   if (isVis('header')) {
@@ -258,18 +481,7 @@ export function buildDocumentMatrix(
   matrix.push({ type: 'divider' });
 
   // Body Content per Document Type
-  if (type === 'diagnostic') {
-    matrix.push({ type: 'flex_row', leftText: 'Modelo:', rightText: data.model || profile.paperSize, isBold: true });
-    matrix.push({ type: 'flex_row', leftText: 'Papel:', rightText: `${profile.paperSize} (${profile.printableWidthMm}mm)` });
-    matrix.push({ type: 'flex_row', leftText: 'Colunas Úteis:', rightText: `${profile.usableColumns} cols` });
-    matrix.push({ type: 'flex_row', leftText: 'Fonte Padrão:', rightText: profile.fontFamily.toUpperCase() });
-    matrix.push({ type: 'flex_row', leftText: 'Status Teste:', rightText: 'OK / SUCESSO', isBold: true });
-    matrix.push({ type: 'divider' });
-    matrix.push({ type: 'text', text: 'TESTE DE CARACTERES & BOLD', align: 'center', style: { bold: true } });
-    matrix.push({ type: 'text', text: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', align: 'left' });
-    matrix.push({ type: 'text', text: 'abcdefghijklmnopqrstuvwxyz!@#$%&*()', align: 'left' });
-    matrix.push({ type: 'divider', double: true });
-  } else if (type === 'cash_flow' || data.cash_flow) {
+  if (type === 'cash_flow' || data.cash_flow) {
     const cf = data.cash_flow || data;
     if (isVis('dateTime')) {
       matrix.push({ type: 'flex_row', leftText: 'Data:', rightText: cf.date || new Date().toLocaleDateString('pt-BR') });
@@ -296,7 +508,14 @@ export function buildDocumentMatrix(
     matrix.push({ type: 'divider' });
 
     if (isVis('itemsTable')) {
-      matrix.push({ type: 'flex_row', leftText: 'QTD ITEM', rightText: 'OBS', isBold: true });
+      matrix.push({
+        type: 'table_row',
+        cols: [
+          { text: 'QTD ITEM', widthRatio: 0.7, align: 'left' },
+          { text: 'OBS', widthRatio: 0.3, align: 'right' }
+        ],
+        style: { bold: true }
+      });
       matrix.push({ type: 'divider' });
       (data.items || []).forEach((it: any) => {
         const qtyStr = `${it.qty || it.quantity || 1}x`;
@@ -326,7 +545,14 @@ export function buildDocumentMatrix(
 
     if (isVis('itemsTable')) {
       matrix.push({ type: 'divider' });
-      matrix.push({ type: 'flex_row', leftText: 'PRODUTO / QTD x UN', rightText: 'VALOR', isBold: true });
+      matrix.push({
+        type: 'table_row',
+        cols: [
+          { text: 'PRODUTO / QTD x UN', widthRatio: 0.7, align: 'left' },
+          { text: 'VALOR', widthRatio: 0.3, align: 'right' }
+        ],
+        style: { bold: true }
+      });
       matrix.push({ type: 'divider' });
 
       const items = sale.items || [];
@@ -401,7 +627,8 @@ export function buildDocumentMatrix(
 // -----------------------------------------------------------------------------
 
 export function renderMatrixToText(matrix: MatrixLine[], profile: PhysicalPrinterProfile): string {
-  const cols = profile.usableColumns;
+  const engine = new LayoutEngine(profile);
+  const cols = engine.getUsableColumns();
   const marginPad = ' '.repeat(profile.leftMarginCols);
   const lines: string[] = [];
 
@@ -410,19 +637,20 @@ export function renderMatrixToText(matrix: MatrixLine[], profile: PhysicalPrinte
       for (let i = 0; i < (item.count || 1); i++) lines.push('');
     } else if (item.type === 'divider') {
       const char = item.char || (item.double ? '=' : '-');
-      lines.push(marginPad + char.repeat(cols));
+      lines.push(marginPad + engine.renderDivider(char, item.style));
     } else if (item.type === 'text') {
-      const wrapped = wrapText(item.text, cols);
-      wrapped.forEach(w => {
-        lines.push(marginPad + alignText(w, cols, item.align || 'left'));
-      });
+      const wrapped = engine.fitText(item.text, cols, { mode: 'wrap', align: item.align || 'left', style: item.style });
+      wrapped.forEach(w => lines.push(marginPad + w));
     } else if (item.type === 'flex_row') {
-      const formatted = formatFlexRow(item.leftText, item.rightText, cols);
+      const formatted = engine.renderFlexRow(item.leftText, item.rightText, item.style);
+      formatted.forEach(f => lines.push(marginPad + f));
+    } else if (item.type === 'table_row') {
+      const formatted = engine.renderRow(item.cols, item.style);
       formatted.forEach(f => lines.push(marginPad + f));
     } else if (item.type === 'qrcode') {
-      lines.push(marginPad + alignText(`[QRCODE: ${item.text}]`, cols, 'center'));
+      lines.push(marginPad + engine.alignString(`[QRCODE: ${item.text}]`, cols, 'center'));
     } else if (item.type === 'barcode') {
-      lines.push(marginPad + alignText(`[BARCODE: ${item.code}]`, cols, 'center'));
+      lines.push(marginPad + engine.alignString(`[BARCODE: ${item.code}]`, cols, 'center'));
     }
   }
 
@@ -512,7 +740,6 @@ export class EscPosStyleState {
   }
 }
 
-// Encoder for Text to Binary Uint8Array
 const textEncoder = new TextEncoder();
 
 export function renderMatrixToEscPosBuffer(
@@ -520,6 +747,7 @@ export function renderMatrixToEscPosBuffer(
   profile: PhysicalPrinterProfile,
   options?: any
 ): Uint8Array {
+  const engine = new LayoutEngine(profile);
   const chunks: Uint8Array[] = [];
   const state = new EscPosStyleState();
 
@@ -529,7 +757,7 @@ export function renderMatrixToEscPosBuffer(
   // Density Command
   if (profile.density === 'ultra') chunks.push(new Uint8Array([0x1D, 0x28, 0x4B, 0x02, 0x00, 0x31, 0x02]));
 
-  const cols = profile.usableColumns;
+  const cols = engine.getUsableColumns();
   const leftPad = ' '.repeat(profile.leftMarginCols);
 
   for (const item of matrix) {
@@ -540,21 +768,31 @@ export function renderMatrixToEscPosBuffer(
     } else if (item.type === 'divider') {
       chunks.push(state.transitionTo({ align: 'left', bold: false }));
       const char = item.char || (item.double ? '=' : '-');
-      chunks.push(textEncoder.encode(leftPad + char.repeat(cols) + '\n'));
+      const divLine = engine.renderDivider(char, item.style);
+      chunks.push(textEncoder.encode(leftPad + divLine + '\n'));
     } else if (item.type === 'text') {
       chunks.push(state.transitionTo({ align: item.align || 'left', ...item.style }));
-      const wrapped = wrapText(item.text, cols);
+      const wrapped = engine.fitText(item.text, cols, { mode: 'wrap', align: item.align || 'left', style: item.style });
       wrapped.forEach(w => {
-        chunks.push(textEncoder.encode(leftPad + alignText(w, cols, item.align || 'left') + '\n'));
+        chunks.push(textEncoder.encode(leftPad + w + '\n'));
       });
-      // Reset inline bold/size if specified
       if (item.style?.bold || item.style?.doubleHeight) {
         chunks.push(state.transitionTo({ bold: false, doubleHeight: false, doubleWidth: false }));
       }
     } else if (item.type === 'flex_row') {
       const isBold = item.isBold === true || item.style?.bold === true;
       chunks.push(state.transitionTo({ align: 'left', bold: isBold, ...item.style }));
-      const formatted = formatFlexRow(item.leftText, item.rightText, cols);
+      const formatted = engine.renderFlexRow(item.leftText, item.rightText, item.style);
+      formatted.forEach(f => {
+        chunks.push(textEncoder.encode(leftPad + f + '\n'));
+      });
+      if (isBold) {
+        chunks.push(state.transitionTo({ bold: false }));
+      }
+    } else if (item.type === 'table_row') {
+      const isBold = item.style?.bold === true;
+      chunks.push(state.transitionTo({ align: 'left', bold: isBold, ...item.style }));
+      const formatted = engine.renderRow(item.cols, item.style);
       formatted.forEach(f => {
         chunks.push(textEncoder.encode(leftPad + f + '\n'));
       });
@@ -562,10 +800,8 @@ export function renderMatrixToEscPosBuffer(
         chunks.push(state.transitionTo({ bold: false }));
       }
     } else if (item.type === 'drawer') {
-      // ESC p 0 25 250 (Cash Drawer Pulse)
       chunks.push(new Uint8Array([0x1B, 0x70, 0x00, 0x19, 0xFA]));
     } else if (item.type === 'cut') {
-      // GS V 66 0 (Full Auto Cut)
       chunks.push(new Uint8Array([0x1D, 0x56, 0x42, 0x00]));
     }
   }
@@ -586,7 +822,7 @@ export function renderMatrixToEscPosBuffer(
 }
 
 // -----------------------------------------------------------------------------
-// 6. HTML GENERATOR FOR SYSTEM SPOOLER (ZERO CLIPPING / WEBBROWSER PRINTING)
+// 6. HTML GENERATOR FOR SYSTEM SPOOLER (BROWSER PRINTING)
 // -----------------------------------------------------------------------------
 
 export function generateReceiptHtmlFromMatrix(
@@ -595,7 +831,7 @@ export function generateReceiptHtmlFromMatrix(
   customDocSettings?: any,
   customLayoutSettings?: any
 ): string {
-  const widthCss = profile.paperSize === '80mm' ? '72mm' : '48mm';
+  const widthCss = `${profile.printableWidthMm}mm`;
   const fontSizeCss = profile.paperSize === '80mm' ? '12px' : '10px';
   const globalBold = customLayoutSettings?.bold === true;
 
@@ -622,6 +858,14 @@ export function generateReceiptHtmlFromMatrix(
           <span style="white-space: nowrap; font-variant-numeric: tabular-nums;">${escapeHtml(item.rightText)}</span>
         </div>
       `;
+    } else if (item.type === 'table_row') {
+      const isBold = item.style?.bold || globalBold;
+      const weight = isBold ? '900' : '600';
+      bodyHtml += `<div style="display: flex; justify-content: space-between; width: 100%; font-weight: ${weight}; margin: 1px 0;">`;
+      item.cols.forEach(col => {
+        bodyHtml += `<span style="text-align: ${col.align || 'left'}; flex: ${col.widthRatio || 1}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(col.text)}</span>`;
+      });
+      bodyHtml += `</div>`;
     } else if (item.type === 'qrcode') {
       bodyHtml += `<div style="text-align: center; font-weight: 800; padding: 4px; border: 1px dashed #000; margin: 4px 0;">[QRCODE: ${escapeHtml(item.text)}]</div>`;
     } else if (item.type === 'barcode') {
@@ -696,7 +940,6 @@ export function generateEscPosBuffer(
   if (Array.isArray(receiptTextOrMatrix)) {
     matrix = receiptTextOrMatrix;
   } else {
-    // If passed raw string, build standard matrix
     matrix = buildDocumentMatrix('sale', { text: receiptTextOrMatrix }, profile);
   }
 
@@ -724,7 +967,6 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-// Hex Preview Helper
 export function bufferToHexPreview(buffer: Uint8Array, maxBytes: number = 32): string {
   if (!buffer || buffer.length === 0) return '00';
   const slice = buffer.slice(0, maxBytes);
@@ -738,7 +980,8 @@ export function bufferToHexPreview(buffer: Uint8Array, maxBytes: number = 32): s
 
 export function printViaSystemBrowser(receiptTextOrHtml: string, paperSize: string = '58mm', customHtml?: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const widthCss = paperSize === '80mm' ? '72mm' : '48mm';
+    const profile = getPhysicalPrinterProfile(paperSize);
+    const widthCss = `${profile.printableWidthMm}mm`;
 
     let printIframe = document.getElementById('adegaos-print-iframe') as HTMLIFrameElement;
     if (!printIframe) {
@@ -991,7 +1234,6 @@ export async function triggerThermalPrint(
         }));
         res = { success: true, durationMs: Math.round(performance.now() - start) };
       } else {
-        // System Spooler / Iframe
         const ok = await printViaSystemBrowser(receiptText, printer.paperSize, receiptHtml);
         res = { success: ok, durationMs: Math.round(performance.now() - start) };
       }

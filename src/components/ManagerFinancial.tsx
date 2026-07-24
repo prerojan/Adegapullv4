@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Landmark, TrendingUp, TrendingDown, CheckSquare, Calendar, Plus, ChevronDown, Check, Percent, AlertTriangle, Calculator, RefreshCw, Printer } from 'lucide-react';
 import { FinancialTransaction, Sale, Product, Shift } from '../types';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
+import { eventBus } from '../services/eventBus';
 
 interface ManagerFinancialProps {
   financialTransactions: FinancialTransaction[];
@@ -298,17 +299,19 @@ export default function ManagerFinancial({
       'outras entradas': otherRevenues
     };
 
-    triggerThermalPrint('cash_flow', {
-      date: new Date().toLocaleDateString('pt-BR'),
-      cashierName: 'Gerente Geral',
-      initialBalance: 0,
-      methods,
-      totalSales,
-      expenses: paidExpenses.map(tx => ({ description: tx.description, value: tx.value })),
-      totalExpenses,
-      finalBalance: financials.netBalance
-    }).catch(err => {
-      console.error("Erro ao imprimir extrato do fluxo de caixa:", err);
+    eventBus.publish('PRINT_REQUESTED', {
+      type: 'cash_flow',
+      data: {
+        date: new Date().toLocaleDateString('pt-BR'),
+        cashierName: 'Gerente Geral',
+        initialBalance: 0,
+        methods,
+        totalSales,
+        expenses: paidExpenses.map(tx => ({ description: tx.description, value: tx.value })),
+        totalExpenses,
+        finalBalance: financials.netBalance
+      },
+      jobKey: `cash_flow_report_${Date.now()}`
     });
   };
 
@@ -1208,9 +1211,11 @@ export default function ManagerFinancial({
 
                           onCloseShift(shiftClosingCash, shiftClosingNotes);
                           
-                          triggerThermalPrint('cash_flow', receiptData)
-                            .then(() => alert("Extrato de fechamento impresso com sucesso."))
-                            .catch(() => alert("Erro ao imprimir extrato térmico."));
+                          eventBus.publish('CASH_FLOW_UPDATED', {
+                            type: 'close',
+                            amount: expectedCash,
+                            data: receiptData
+                          });
 
                           setShiftClosingCash(0);
                           setShiftClosingNotes('');
@@ -1303,7 +1308,11 @@ export default function ManagerFinancial({
                                   totalExpenses: totalSangrias,
                                   finalBalance: expected
                                 };
-                                triggerThermalPrint('cash_flow', receiptData);
+                                eventBus.publish('PRINT_REQUESTED', {
+                                  type: 'cash_flow',
+                                  data: receiptData,
+                                  jobKey: `reprint_shift_${sh.id}`
+                                });
                                 alert("Cupom de auditoria enviado para impressão!");
                               }}
                               className={`px-2 py-1 rounded text-[10px] font-bold flex items-center justify-center gap-1 mx-auto transition-colors ${

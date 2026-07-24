@@ -3,6 +3,7 @@ import { ChefHat, GlassWater, Clock, Check, Play, User, RefreshCw, Layers, Check
 import { TableComandaState, Product, CashierUser } from '../types';
 import { ToastContainer, ToastItem, ToastType, playPremiumSound } from './ToastNotification';
 import { triggerThermalPrint } from '../lib/thermalPrinter';
+import { eventBus } from '../services/eventBus';
 import { shouldCategoryGoToProduction, getCategoryProductionSector } from '../lib/productionCategories';
 import ProductionCategoryConfigManager from './ProductionCategoryConfigManager';
 
@@ -294,15 +295,18 @@ export default function ProductionPanel({
         // Render in virtual tape scroll
         setVirtualReceipts(prev => [newReceipt, ...prev].slice(0, 3));
 
-        // Use our robust unified thermal printing system!
-        triggerThermalPrint('comanda', {
-          date: new Date().toLocaleDateString('pt-BR'),
-          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          table: tableStr,
+        // Publish PRINT_REQUESTED event to PrintService
+        eventBus.publish('PRINT_REQUESTED', {
+          type: 'comanda',
           sector: activeSector,
-          items: items.map(it => ({ name: it.productName, qty: it.quantity, notes: it.notes }))
-        }).catch(err => {
-          console.error("Erro na impressão de comanda:", err);
+          data: {
+            date: new Date().toLocaleDateString('pt-BR'),
+            time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            table: tableStr,
+            sector: activeSector,
+            items: items.map(it => ({ name: it.productName, qty: it.quantity, notes: it.notes }))
+          },
+          jobKey: `comanda_${first.tableId}_${activeSector}_${Date.now()}`
         });
       });
     }
@@ -335,6 +339,31 @@ export default function ProductionPanel({
     };
 
     onUpdateTableItems(tableId, updatedItems);
+
+    const tableStr = `${table.type === 'mesa' ? 'Mesa' : 'Comanda'} ${table.number}`;
+
+    // Publish event according to operational status update
+    if (newStatus === 'pronto') {
+      eventBus.publish('ORDER_READY', {
+        id: tableId,
+        table: tableStr,
+        sector: activeSector,
+        itemNames: [products.find(p => p.id === currentItem.productId)?.name || 'Item']
+      });
+    } else if (newStatus === 'cancelado') {
+      eventBus.publish('ORDER_CANCELLED', {
+        id: tableId,
+        table: tableStr,
+        reason: 'Cancelado na Produção'
+      });
+    } else {
+      eventBus.publish('ORDER_UPDATED', {
+        id: tableId,
+        table: tableStr,
+        status: newStatus,
+        itemIndex
+      });
+    }
 
     // Audio feedback chime for local operational action (playing premium success sound)
     playPremiumSound('success');

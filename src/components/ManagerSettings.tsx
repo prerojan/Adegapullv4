@@ -736,8 +736,8 @@ export default function ManagerSettings({
                           theme === 'dark' ? 'bg-[#111] border-gray-800 text-white' : 'bg-gray-50 border-gray-200 text-slate-900'
                         }`}
                       >
-                        <option value="58mm">58mm (32 col)</option>
-                        <option value="80mm">80mm (48 col)</option>
+                        <option value="58mm">58mm (48mm útil)</option>
+                        <option value="80mm">80mm (72mm útil)</option>
                       </select>
                     </div>
 
@@ -930,8 +930,8 @@ export default function ManagerSettings({
                       theme === 'dark' ? 'bg-[#111] border-gray-800 text-white' : 'bg-gray-50 border-gray-200 text-black'
                     }`}
                   >
-                    <option value="58mm">58mm (32 colunas)</option>
-                    <option value="80mm">80mm (48 colunas)</option>
+                    <option value="58mm">58mm (48mm útil)</option>
+                    <option value="80mm">80mm (72mm útil)</option>
                   </select>
                 </div>
 
